@@ -116,7 +116,7 @@ impl fmt::Display for CPU {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Regs: AF {:#06x}, BC {:#06x}, DE {:#06x}, HL {:#06x}, PC {:#06x}, SP {:#06x} | Flags: Z {}, C {}, BCD-N {}, BCD-H {}",
+            "Regs: AF {:#06X}, BC {:#06X}, DE {:#06X}, HL {:#06X}, PC {:#06X}, SP {:#06X} | Flags: Z {}, C {}, BCD-N {}, BCD-H {}",
             self.read_af(),
             self.read_bc(),
             self.read_de(),

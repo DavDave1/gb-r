@@ -31,15 +31,36 @@ impl GameBoy {
         let byte = self.memory.read_byte(self.cpu.reg_pc + 1);
         let word = self.memory.read_word(self.cpu.reg_pc + 1);
 
+        println!("{:#06X}: {:#04X} {:#06X}", self.cpu.reg_pc, opcode, word);
+
         self.cpu.reg_pc += 1;
-        println!("{:#06x}: {:#04x} {:#06x}", self.cpu.reg_pc, opcode, word);
 
         match opcode {
+            0x0E => {
+                // LD C, d8
+                self.cpu.reg_c = byte;
+                self.cpu.reg_pc += 1;
+            }
+            0x3E => {
+                // LD A, d8
+                self.cpu.reg_a = byte;
+                self.cpu.reg_pc += 1;
+            }
             0x20 => {
                 // JR, NZ
-                let offset = byte as u16;
-                if (self.cpu.get_zero_flag() == false) {
-                    self.cpu.reg_pc += offset;
+                let offset = byte as i8;
+                self.cpu.reg_pc += 1;
+
+                if self.cpu.get_zero_flag() == false {
+                    // TODO: find a better way to to this
+                    if offset < 0
+                    {
+                        self.cpu.reg_pc -= offset.abs() as u16;
+                    }
+                    else
+                    {
+                        self.cpu.reg_pc += offset as u16;
+                    }
                 }
             }
             0x21 => {
@@ -79,11 +100,11 @@ impl GameBoy {
                         self.cpu.set_zero_flag(self.cpu.reg_h & 0b10000000 == 0);
                         self.cpu.set_bcd_h_flag(true);
                     }
-                    _ => panic!("Unknown CB instruction {:#x}", cb_opcode),
+                    _ => panic!("Unknown CB instruction {:#04X}", cb_opcode),
                 }
                 self.cpu.reg_pc += 1;
             }
-            _ => panic!("Unknown instruction {:#x}", opcode),
+            _ => panic!("Unknown instruction {:#04X}", opcode),
         }
     }
 }
