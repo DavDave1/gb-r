@@ -1,0 +1,10 @@
+pub const MEMORY_SIZE: usize = 0x10000;
+const VRAM_OFFSET: usize = 0x08000;
+const RAM_OFFSET: usize = 0x0A000;
+const WRAM_OFFSET: usize = 0x0C000;
+const WRAM_ECHO_OFFSET: usize = 0x0E000;
+const OAM_OFFSET: usize = 0x0FE00;
+const OAM_INVALID_OFFSET: usize = 0x0FEA0;
+const MEM_MAPPED_IO_OFFSET: usize = 0x0FF00;
+const HRAM_OFFSET: usize = 0x0FF80;
+const IE_REGISTER_OFFSET: usize = 0x0FFFF;
