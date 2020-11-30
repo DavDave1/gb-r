@@ -22,7 +22,7 @@ impl GameBoy {
     pub fn run(&mut self) {
         loop {
             self.step();
-            println!("CPU: {}", self.cpu);
+            //    println!("CPU: {}", self.cpu);
         }
     }
 
@@ -36,6 +36,14 @@ impl GameBoy {
         self.cpu.reg_pc += 1;
 
         match opcode {
+            0x0C => {
+                // INC C
+                let overflow = self.cpu.reg_c & 0x03 != 0;
+                self.cpu.reg_c += 1;
+                self.cpu.set_zero_flag(self.cpu.reg_c == 0);
+                self.cpu.set_bcd_n_flag(false);
+                self.cpu.set_bcd_h_flag(overflow);
+            }
             0x0E => {
                 // LD C, d8
                 self.cpu.reg_c = byte;
@@ -53,12 +61,9 @@ impl GameBoy {
 
                 if self.cpu.get_zero_flag() == false {
                     // TODO: find a better way to to this
-                    if offset < 0
-                    {
+                    if offset < 0 {
                         self.cpu.reg_pc -= offset.abs() as u16;
-                    }
-                    else
-                    {
+                    } else {
                         self.cpu.reg_pc += offset as u16;
                     }
                 }
@@ -74,10 +79,11 @@ impl GameBoy {
                 self.cpu.reg_pc += 2;
             }
             0x32 => {
-                // LD (HL-), A
+                // LD HL-, A
                 self.memory.write_byte(self.cpu.read_hl(), self.cpu.reg_a);
                 self.cpu.write_hl(self.cpu.read_hl() - 1);
             }
+            0x77 => self.memory.write_byte(self.cpu.read_hl(), self.cpu.reg_a), // LD HL, A
             0xAF => {
                 // xor A
                 self.cpu.reg_a ^= self.cpu.reg_a;
@@ -104,6 +110,13 @@ impl GameBoy {
                 }
                 self.cpu.reg_pc += 1;
             }
+            0xE0 => {
+                // LDH a8, A
+                self.memory.write_byte(0xFF00 + byte as u16, self.cpu.reg_a);
+                self.cpu.reg_pc += 1;
+            }
+            0xE2 => self.cpu.reg_c = self.cpu.reg_a, // LD C, A
+
             _ => panic!("Unknown instruction {:#04X}", opcode),
         }
     }
