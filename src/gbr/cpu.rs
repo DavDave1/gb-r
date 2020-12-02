@@ -1,28 +1,32 @@
 use std::fmt;
 
+use crate::gbr::memory::Memory;
+
 #[derive(Default)]
 pub struct CPU {
     // 8bit general purpose registers
-    pub reg_a: u8,
-    pub reg_b: u8,
-    pub reg_c: u8,
-    pub reg_d: u8,
-    pub reg_e: u8,
-    pub reg_h: u8,
-    pub reg_l: u8,
-    pub reg_f: u8, //8bit flag register
+    reg_a: u8,
+    reg_b: u8,
+    reg_c: u8,
+    reg_d: u8,
+    reg_e: u8,
+    reg_h: u8,
+    reg_l: u8,
+    reg_f: u8, //8bit flag register
 
     //16bit special purpose registers
-    pub reg_pc: u16, // program counter
-    pub reg_sp: u16, // stack pointer
+    reg_pc: u16, // program counter
+    reg_sp: u16, // stack pointer
 
-    pub boot_rom_lock: bool,
+    boot_rom_lock: bool,
+    low_power_mode: bool,
 }
 
 impl CPU {
     pub fn new() -> Self {
         CPU {
             boot_rom_lock: false,
+            low_power_mode: false,
             ..Default::default()
         }
     }
@@ -108,6 +112,109 @@ impl CPU {
             self.reg_f = self.reg_f | 0b00100000
         } else {
             self.reg_f = self.reg_f & 0b11011111;
+        }
+    }
+
+    pub fn step(&mut self, memory: &mut Memory) {
+        let opcode: u8 = memory.read_byte(self.reg_pc);
+        let byte = memory.read_byte(self.reg_pc + 1);
+        let word = memory.read_word(self.reg_pc + 1);
+
+        println!("{:#06X}: {:#04X} {:#06X}", self.reg_pc, opcode, word);
+
+        self.reg_pc += 1;
+
+        match opcode {
+            0x0C => {
+                // INC C
+                let overflow = self.reg_c & 0x03 != 0;
+                self.reg_c += 1;
+                self.set_zero_flag(self.reg_c == 0);
+                self.set_bcd_n_flag(false);
+                self.set_bcd_h_flag(overflow);
+            }
+            0x0E => {
+                // LD C, d8
+                self.reg_c = byte;
+                self.reg_pc += 1;
+            }
+            0x10 => {
+                self.low_power_mode = true;
+            }
+            0x11 => {
+                // LD DE, d16
+                self.write_de(word);
+                self.reg_pc += 3;
+            }
+            0x3E => {
+                // LD A, d8
+                self.reg_a = byte;
+                self.reg_pc += 1;
+            }
+            0x20 => {
+                // JR, NZ
+                let offset = byte as i8;
+                self.reg_pc += 1;
+
+                if self.get_zero_flag() == false {
+                    // TODO: find a better way to to this
+                    if offset < 0 {
+                        self.reg_pc -= offset.abs() as u16;
+                    } else {
+                        self.reg_pc += offset as u16;
+                    }
+                }
+            }
+            0x21 => {
+                // LD HL, nn
+                self.write_hl(word);
+                self.reg_pc += 2;
+            }
+            0x31 => {
+                // load SP immediate
+                self.reg_sp = word;
+                self.reg_pc += 2;
+            }
+            0x32 => {
+                // LD HL-, A
+                memory.write_byte(self.read_hl(), self.reg_a);
+                self.write_hl(self.read_hl() - 1);
+            }
+            0x77 => memory.write_byte(self.read_hl(), self.reg_a), // LD HL, A
+            0xAF => {
+                // xor A
+                self.reg_a ^= self.reg_a;
+                self.set_zero_flag(self.reg_a == 0);
+            }
+            0xCB => {
+                let cb_opcode = byte;
+                match cb_opcode {
+                    0x20 => {
+                        // SLA B
+                        let ext_b = (self.reg_b as u16) << 1;
+
+                        self.set_carry_flag(ext_b & 0x0100 != 0);
+                        self.set_zero_flag(ext_b & 0x00FF == 0);
+
+                        self.reg_b = ext_b as u8;
+                    }
+                    0x7C => {
+                        // BIT 7,H
+                        self.set_zero_flag(self.reg_h & 0b10000000 == 0);
+                        self.set_bcd_h_flag(true);
+                    }
+                    _ => panic!("Unknown CB instruction {:#04X}", cb_opcode),
+                }
+                self.reg_pc += 1;
+            }
+            0xE0 => {
+                // LDH a8, A
+                memory.write_byte(0xFF00 + byte as u16, self.reg_a);
+                self.reg_pc += 1;
+            }
+            0xE2 => self.reg_c = self.reg_a, // LD C, A
+
+            _ => panic!("Unknown instruction {:#04X}", opcode),
         }
     }
 }
