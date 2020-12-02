@@ -150,7 +150,6 @@ impl CPU {
             0x1A => {
                 // LD A, DE
                 self.reg_a = memory.read_byte(self.read_de());
-                self.reg_pc += 1;
             }
             0x20 => {
                 // JR, NZ
