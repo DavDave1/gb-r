@@ -125,6 +125,7 @@ impl CPU {
         self.reg_pc += 1;
 
         match opcode {
+            0x00 => (), // NOP
             0x0C => {
                 // INC C
                 let overflow = self.reg_c & 0x03 != 0;
@@ -144,18 +145,17 @@ impl CPU {
             0x11 => {
                 // LD DE, d16
                 self.write_de(word);
-                self.reg_pc += 3;
+                self.reg_pc += 2;
             }
-            0x3E => {
-                // LD A, d8
-                self.reg_a = byte;
+            0x1A => {
+                // LD A, DE
+                self.reg_a = memory.read_byte(self.read_de());
                 self.reg_pc += 1;
             }
             0x20 => {
                 // JR, NZ
                 let offset = byte as i8;
                 self.reg_pc += 1;
-
                 if self.get_zero_flag() == false {
                     // TODO: find a better way to to this
                     if offset < 0 {
@@ -180,7 +180,33 @@ impl CPU {
                 memory.write_byte(self.read_hl(), self.reg_a);
                 self.write_hl(self.read_hl() - 1);
             }
+            0x3E => {
+                // LD A, d8
+                self.reg_a = byte;
+                self.reg_pc += 1;
+            }
             0x77 => memory.write_byte(self.read_hl(), self.reg_a), // LD HL, A
+            0x80 => {
+                // ADD A, B
+                let old_reg_a = self.reg_a;
+                let result = self.reg_a as u16 + self.reg_b as u16;
+                self.reg_a = result as u8;
+
+                self.set_bcd_h_flag(self.reg_a & 0xF0 > old_reg_a & 0xF0);
+                self.set_bcd_n_flag(false);
+                self.set_carry_flag(result & 0xFF00 != 0);
+                self.set_zero_flag(self.reg_a == 0);
+            }
+            0x95 => {
+                // SUB A, L
+                let old_reg_a = self.reg_a;
+                self.reg_a = self.reg_a.wrapping_sub(self.reg_l);
+
+                self.set_bcd_h_flag(self.reg_a & 0xF0 < old_reg_a & 0xF0);
+                self.set_bcd_n_flag(true);
+                self.set_carry_flag(old_reg_a > self.reg_a);
+                self.set_zero_flag(self.reg_a == 0)
+            }
             0xAF => {
                 // xor A
                 self.reg_a ^= self.reg_a;
