@@ -22,7 +22,7 @@ impl GameBoy {
     pub fn run(&mut self) {
         loop {
             self.cpu.step(&mut self.memory);
-            //    println!("CPU: {}", self.cpu);
+            //println!("CPU: {}", self.cpu);
         }
     }
 }

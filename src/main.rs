@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate enum_primitive;
+
 use std::path::Path;
 
 mod gbr;

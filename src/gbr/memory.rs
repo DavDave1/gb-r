@@ -3,6 +3,7 @@ use std::io::{Error, ErrorKind};
 
 use byteorder::{ByteOrder, LittleEndian};
 
+use crate::gbr::instruction::Instruction;
 use crate::gbr::memory_map::*;
 
 const BOOT_ROM_SIZE: usize = 256;
@@ -23,6 +24,9 @@ impl Memory {
         Ok(())
     }
 
+    pub fn read_instruction(&self, addr: u16) -> Instruction {
+        Instruction::new(&self.data[addr as usize..addr as usize + 3])
+    }
     pub fn read_byte(&self, addr: u16) -> u8 {
         self.data[addr as usize]
     }

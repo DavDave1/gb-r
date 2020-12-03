@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::gbr::instruction::{CbOpcode, Opcode};
 use crate::gbr::memory::Memory;
 
 #[derive(Default)]
@@ -116,45 +117,32 @@ impl CPU {
     }
 
     pub fn step(&mut self, memory: &mut Memory) {
-        let opcode: u8 = memory.read_byte(self.reg_pc);
-        let byte = memory.read_byte(self.reg_pc + 1);
-        let word = memory.read_word(self.reg_pc + 1);
-
-        println!("{:#06X}: {:#04X} {:#06X}", self.reg_pc, opcode, word);
-
-        self.reg_pc += 1;
+        let instr = memory.read_instruction(self.reg_pc);
+        let opcode = instr.opcode();
+        println!("{:#06X}: {:#?} {:#06X}", self.reg_pc, opcode, instr.word());
 
         match opcode {
-            0x00 => (), // NOP
-            0x0C => {
-                // INC C
+            Opcode::Nop => (),
+            Opcode::IncC => {
                 let overflow = self.reg_c & 0x03 != 0;
-                self.reg_c += 1;
                 self.set_zero_flag(self.reg_c == 0);
                 self.set_bcd_n_flag(false);
                 self.set_bcd_h_flag(overflow);
             }
-            0x0E => {
-                // LD C, d8
-                self.reg_c = byte;
-                self.reg_pc += 1;
+            Opcode::LdCd8 => {
+                self.reg_c = instr.byte();
             }
-            0x10 => {
+            Opcode::Stop => {
                 self.low_power_mode = true;
             }
-            0x11 => {
-                // LD DE, d16
-                self.write_de(word);
-                self.reg_pc += 2;
+            Opcode::LdDEd16 => {
+                self.write_de(instr.word());
             }
-            0x1A => {
-                // LD A, DE
+            Opcode::LdADE => {
                 self.reg_a = memory.read_byte(self.read_de());
             }
-            0x20 => {
-                // JR, NZ
-                let offset = byte as i8;
-                self.reg_pc += 1;
+            Opcode::Jrnz => {
+                let offset = instr.byte() as i8;
                 if self.get_zero_flag() == false {
                     // TODO: find a better way to to this
                     if offset < 0 {
@@ -164,29 +152,21 @@ impl CPU {
                     }
                 }
             }
-            0x21 => {
-                // LD HL, nn
-                self.write_hl(word);
-                self.reg_pc += 2;
+            Opcode::LdHLd16 => {
+                self.write_hl(instr.word());
             }
-            0x31 => {
-                // load SP immediate
-                self.reg_sp = word;
-                self.reg_pc += 2;
+            Opcode::LdSPd16 => {
+                self.reg_sp = instr.word();
             }
-            0x32 => {
-                // LD HL-, A
+            Opcode::LdHLdecA => {
                 memory.write_byte(self.read_hl(), self.reg_a);
                 self.write_hl(self.read_hl() - 1);
             }
-            0x3E => {
-                // LD A, d8
-                self.reg_a = byte;
-                self.reg_pc += 1;
+            Opcode::LdAd8 => {
+                self.reg_a = instr.byte();
             }
-            0x77 => memory.write_byte(self.read_hl(), self.reg_a), // LD HL, A
-            0x80 => {
-                // ADD A, B
+            Opcode::LdHLA => memory.write_byte(self.read_hl(), self.reg_a),
+            Opcode::AddAB => {
                 let old_reg_a = self.reg_a;
                 let result = self.reg_a as u16 + self.reg_b as u16;
                 self.reg_a = result as u8;
@@ -196,8 +176,7 @@ impl CPU {
                 self.set_carry_flag(result & 0xFF00 != 0);
                 self.set_zero_flag(self.reg_a == 0);
             }
-            0x95 => {
-                // SUB A, L
+            Opcode::SubAL => {
                 let old_reg_a = self.reg_a;
                 self.reg_a = self.reg_a.wrapping_sub(self.reg_l);
 
@@ -206,40 +185,32 @@ impl CPU {
                 self.set_carry_flag(old_reg_a > self.reg_a);
                 self.set_zero_flag(self.reg_a == 0)
             }
-            0xAF => {
-                // xor A
+            Opcode::XorA => {
                 self.reg_a ^= self.reg_a;
                 self.set_zero_flag(self.reg_a == 0);
             }
-            0xCB => {
-                let cb_opcode = byte;
-                match cb_opcode {
-                    0x20 => {
-                        // SLA B
-                        let ext_b = (self.reg_b as u16) << 1;
+            Opcode::Prefix => match instr.cb_opcode() {
+                CbOpcode::SlaB => {
+                    let ext_b = (self.reg_b as u16) << 1;
 
-                        self.set_carry_flag(ext_b & 0x0100 != 0);
-                        self.set_zero_flag(ext_b & 0x00FF == 0);
+                    self.set_carry_flag(ext_b & 0x0100 != 0);
+                    self.set_zero_flag(ext_b & 0x00FF == 0);
 
-                        self.reg_b = ext_b as u8;
-                    }
-                    0x7C => {
-                        // BIT 7,H
-                        self.set_zero_flag(self.reg_h & 0b10000000 == 0);
-                        self.set_bcd_h_flag(true);
-                    }
-                    _ => panic!("Unknown CB instruction {:#04X}", cb_opcode),
+                    self.reg_b = ext_b as u8;
                 }
-                self.reg_pc += 1;
+                CbOpcode::Bit7H => {
+                    self.set_zero_flag(self.reg_h & 0b10000000 == 0);
+                    self.set_bcd_h_flag(true);
+                }
+            },
+            Opcode::LdHa8A => {
+                memory.write_byte(0xFF00 + instr.byte() as u16, self.reg_a);
             }
-            0xE0 => {
-                // LDH a8, A
-                memory.write_byte(0xFF00 + byte as u16, self.reg_a);
-                self.reg_pc += 1;
-            }
-            0xE2 => self.reg_c = self.reg_a, // LD C, A
+            Opcode::LdCA => self.reg_c = self.reg_a,
+        }
 
-            _ => panic!("Unknown instruction {:#04X}", opcode),
+        if jumped == false {
+            self.reg_pc += instr.length();
         }
     }
 }
