@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::gbr::alu::ALU;
 use crate::gbr::instruction::{CbOpcode, Opcode};
 use crate::gbr::memory::Memory;
 
@@ -130,12 +131,7 @@ impl CPU {
         let mut jumped = false;
         match opcode {
             Opcode::Nop => (),
-            Opcode::IncC => {
-                let overflow = self.reg_c & 0x03 != 0;
-                self.set_zero_flag(self.reg_c == 0);
-                self.set_bcd_n_flag(false);
-                self.set_bcd_h_flag(overflow);
-            }
+            Opcode::IncC => self.reg_c = ALU::inc(self, self.reg_c),
             Opcode::LdBd8 => self.reg_b = instr.byte(),
             Opcode::LdCd8 => self.reg_c = instr.byte(),
             Opcode::Stop => self.low_power_mode = true,
@@ -161,43 +157,14 @@ impl CPU {
             Opcode::LdAd8 => self.reg_a = instr.byte(),
             Opcode::LdCA => self.reg_c = self.reg_a,
             Opcode::LdHLA => memory.write_byte(self.read_hl(), self.reg_a),
-            Opcode::AddAB => {
-                let old_reg_a = self.reg_a;
-                let result = self.reg_a as u16 + self.reg_b as u16;
-                self.reg_a = result as u8;
-
-                self.set_bcd_h_flag(self.reg_a & 0xF0 > old_reg_a & 0xF0);
-                self.set_bcd_n_flag(false);
-                self.set_carry_flag(result & 0xFF00 != 0);
-                self.set_zero_flag(self.reg_a == 0);
-            }
-            Opcode::SubAL => {
-                let old_reg_a = self.reg_a;
-                self.reg_a = self.reg_a.wrapping_sub(self.reg_l);
-
-                self.set_bcd_h_flag(self.reg_a & 0xF0 < old_reg_a & 0xF0);
-                self.set_bcd_n_flag(true);
-                self.set_carry_flag(old_reg_a > self.reg_a);
-                self.set_zero_flag(self.reg_a == 0)
-            }
-            Opcode::XorA => {
-                self.reg_a ^= self.reg_a;
-                self.set_zero_flag(self.reg_a == 0);
-            }
+            Opcode::AddAB => self.reg_a = ALU::add(self, self.reg_a, self.reg_b),
+            Opcode::SubAL => self.reg_a = ALU::sub(self, self.reg_a, self.reg_l),
+            Opcode::XorA => self.reg_a = ALU::xor(self, self.reg_a, self.reg_a),
             Opcode::PushCB => self.push_stack(memory, self.read_bc()),
             Opcode::Prefix => match instr.cb_opcode() {
-                CbOpcode::SlaB => {
-                    let ext_b = (self.reg_b as u16) << 1;
-
-                    self.set_carry_flag(ext_b & 0x0100 != 0);
-                    self.set_zero_flag(ext_b & 0x00FF == 0);
-
-                    self.reg_b = ext_b as u8;
-                }
-                CbOpcode::Bit7H => {
-                    self.set_zero_flag(self.reg_h & 0b10000000 == 0);
-                    self.set_bcd_h_flag(true);
-                }
+                CbOpcode::RlcC => self.reg_c = ALU::rlc(self, self.reg_c),
+                CbOpcode::SlaB => self.reg_b = ALU::sla(self, self.reg_b),
+                CbOpcode::Bit7H => ALU::test_bit(self, self.reg_h, 7),
             },
             Opcode::Calla16 => {
                 self.push_stack(memory, self.reg_pc + instr.length());

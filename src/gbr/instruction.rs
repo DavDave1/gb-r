@@ -34,6 +34,7 @@ pub enum Opcode {
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 pub enum CbOpcode {
+    RlcC = 0x11,
     SlaB = 0x20,
     Bit7H = 0x7C,
 }
