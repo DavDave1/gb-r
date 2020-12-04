@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::gbr::alu::ALU;
+use crate::gbr::bus::Bus;
 use crate::gbr::instruction::{CbOpcode, Opcode};
-use crate::gbr::memory::Memory;
 
 #[derive(Default)]
 pub struct CPU {
@@ -31,6 +31,10 @@ impl CPU {
             low_power_mode: false,
             ..Default::default()
         }
+    }
+
+    pub fn boot_rom_lock(&self) -> bool {
+        self.boot_rom_lock
     }
 
     pub fn read_af(&self) -> u16 {
@@ -117,25 +121,25 @@ impl CPU {
         }
     }
 
-    fn push_stack(&mut self, memory: &mut Memory, value: u16) {
-        memory.write_byte(self.reg_sp - 1, (value >> 8) as u8);
-        memory.write_byte(self.reg_sp - 2, value as u8);
+    fn push_stack(&mut self, bus: &mut Bus, value: u16) {
+        bus.write_byte(self.reg_sp - 1, (value >> 8) as u8);
+        bus.write_byte(self.reg_sp - 2, value as u8);
         self.reg_sp -= 2;
     }
 
-    fn pop_stack(&mut self, memory: &mut Memory) -> u16 {
-        let value = memory.read_word(self.reg_sp);
+    fn pop_stack(&mut self, bus: &mut Bus) -> u16 {
+        let value = bus.read_word(self.reg_sp);
         self.reg_sp += 2;
         value
     }
 
-    pub fn step(&mut self, memory: &mut Memory) {
-        let instr = memory.read_instruction(self.reg_pc);
+    pub fn step(&mut self, bus: &mut Bus) {
+        let instr = bus.fetch_instruction(self.reg_pc);
         let opcode = match instr.opcode() {
             Some(op) => op,
             None => panic!(
                 "Unknown instruction {:#04X}\n\n CPU state: {}",
-                memory.read_byte(self.reg_pc),
+                bus.read_byte(self.reg_pc),
                 self
             ),
         };
@@ -157,7 +161,7 @@ impl CPU {
                 self.reg_a = ALU::rlc(self, self.reg_a);
                 self.set_zero_flag(false); // investigate: why this special case?
             }
-            Opcode::LdADE => self.reg_a = memory.read_byte(self.read_de()),
+            Opcode::LdADE => self.reg_a = bus.read_byte(self.read_de()),
             Opcode::Jrnz => {
                 let offset = instr.byte() as i8;
                 if self.get_zero_flag() == false {
@@ -171,39 +175,39 @@ impl CPU {
             }
             Opcode::LdHLd16 => self.write_hl(instr.word()),
             Opcode::LdHLincA => {
-                memory.write_byte(self.read_hl(), self.reg_a);
+                bus.write_byte(self.read_hl(), self.reg_a);
                 self.write_hl(self.read_hl() + 1);
             }
             Opcode::IncHL => self.write_hl(self.read_hl() + 1),
             Opcode::LdSPd16 => self.reg_sp = instr.word(),
             Opcode::LdHLdecA => {
-                memory.write_byte(self.read_hl(), self.reg_a);
+                bus.write_byte(self.read_hl(), self.reg_a);
                 self.write_hl(self.read_hl() - 1);
             }
             Opcode::LdAd8 => self.reg_a = instr.byte(),
             Opcode::LdCA => self.reg_c = self.reg_a,
-            Opcode::LdHLA => memory.write_byte(self.read_hl(), self.reg_a),
+            Opcode::LdHLA => bus.write_byte(self.read_hl(), self.reg_a),
             Opcode::LdAE => self.reg_a = self.reg_e,
             Opcode::AddAB => self.reg_a = ALU::add(self, self.reg_a, self.reg_b),
             Opcode::SubAL => self.reg_a = ALU::sub(self, self.reg_a, self.reg_l),
             Opcode::XorA => self.reg_a = ALU::xor(self, self.reg_a, self.reg_a),
             Opcode::PopBC => {
-                let value = self.pop_stack(memory);
+                let value = self.pop_stack(bus);
                 self.write_bc(value);
             }
-            Opcode::PushCB => self.push_stack(memory, self.read_bc()),
-            Opcode::Ret => self.reg_pc = self.pop_stack(memory),
+            Opcode::PushCB => self.push_stack(bus, self.read_bc()),
+            Opcode::Ret => self.reg_pc = self.pop_stack(bus),
             Opcode::Prefix => match instr.cb_opcode() {
                 CbOpcode::RlcC => self.reg_c = ALU::rlc(self, self.reg_c),
                 CbOpcode::SlaB => self.reg_b = ALU::sla(self, self.reg_b),
                 CbOpcode::Bit7H => ALU::test_bit(self, self.reg_h, 7),
             },
             Opcode::Calla16 => {
-                self.push_stack(memory, self.reg_pc + instr.length());
+                self.push_stack(bus, self.reg_pc + instr.length());
                 self.reg_pc = instr.word();
             }
-            Opcode::Ldha8A => memory.write_byte(0xFF00 + instr.byte() as u16, self.reg_a),
-            Opcode::LdhCA => memory.write_byte(0xFF00 + self.reg_c as u16, self.reg_a),
+            Opcode::Ldha8A => bus.write_byte(0xFF00 + instr.byte() as u16, self.reg_a),
+            Opcode::LdhCA => bus.write_byte(0xFF00 + self.reg_c as u16, self.reg_a),
         }
     }
 }

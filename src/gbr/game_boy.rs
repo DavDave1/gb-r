@@ -1,28 +1,22 @@
-use std::io::Error;
-
+use crate::gbr::bus::Bus;
 use crate::gbr::cpu::CPU;
-use crate::gbr::memory::Memory;
 
 pub struct GameBoy {
     cpu: CPU,
-    memory: Memory,
+    bus: Bus,
 }
 
 impl GameBoy {
-    pub fn new() -> Self {
+    pub fn new(boot_rom_filename: &std::path::Path) -> Self {
         GameBoy {
-            memory: Memory::default(),
             cpu: CPU::new(),
+            bus: Bus::new(boot_rom_filename),
         }
-    }
-    pub fn load_boot_rom(&mut self, boot_rom_filename: &std::path::Path) -> Result<(), Error> {
-        self.memory.load_boot_rom(boot_rom_filename)
     }
 
     pub fn run(&mut self) {
         loop {
-            self.cpu.step(&mut self.memory);
-            //println!("CPU: {}", self.cpu);
+            self.cpu.step(&mut self.bus);
         }
     }
 }

@@ -1,7 +1,7 @@
-pub mod cpu;
 pub mod game_boy;
-pub mod memory;
-pub mod memory_map;
 
 mod alu;
+mod bus;
+mod cpu;
 mod instruction;
+mod memory_map;
