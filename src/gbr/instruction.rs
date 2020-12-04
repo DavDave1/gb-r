@@ -8,6 +8,7 @@ enum_from_primitive! {
 pub enum Opcode {
     Nop = 0x00,
     IncC = 0x0C,
+    LdBd8 = 0x06,
     LdCd8 = 0x0E,
     Stop = 0x10,
     LdDEd16 = 0x11,
@@ -17,13 +18,16 @@ pub enum Opcode {
     LdSPd16 = 0x31,
     LdHLdecA = 0x32,
     LdAd8 = 0x3E,
+    LdCA = 0x4F,
     LdHLA = 0x77,
     AddAB = 0x80,
     SubAL = 0x95,
     XorA = 0xAF,
+    PushCB = 0xC5,
     Prefix = 0xCB,
-    LdHa8A = 0xE0,
-    LdCA = 0xE2
+    Calla16 = 0xCD,
+    Ldha8A = 0xE0,
+    LdhCA = 0xE2
 }
 }
 
@@ -74,6 +78,7 @@ impl Instruction {
         match self.opcode() {
             Opcode::Nop => 1,
             Opcode::IncC => 1,
+            Opcode::LdBd8 => 2,
             Opcode::LdCd8 => 2,
             Opcode::Stop => 1,
             Opcode::LdDEd16 => 3,
@@ -83,13 +88,16 @@ impl Instruction {
             Opcode::LdSPd16 => 3,
             Opcode::LdHLdecA => 1,
             Opcode::LdAd8 => 2,
+            Opcode::LdCA => 1,
             Opcode::LdHLA => 1,
             Opcode::AddAB => 1,
             Opcode::SubAL => 1,
             Opcode::XorA => 1,
+            Opcode::PushCB => 1,
             Opcode::Prefix => 2,
-            Opcode::LdHa8A => 2,
-            Opcode::LdCA => 1,
+            Opcode::Calla16 => 3,
+            Opcode::Ldha8A => 2,
+            Opcode::LdhCA => 1,
         }
     }
 }

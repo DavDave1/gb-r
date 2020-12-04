@@ -116,11 +116,18 @@ impl CPU {
         }
     }
 
+    fn push_stack(&mut self, memory: &mut Memory, value: u16) {
+        memory.write_byte(self.reg_sp - 1, (value >> 8) as u8);
+        memory.write_byte(self.reg_sp - 2, value as u8);
+        self.reg_sp -= 2;
+    }
+
     pub fn step(&mut self, memory: &mut Memory) {
         let instr = memory.read_instruction(self.reg_pc);
         let opcode = instr.opcode();
         println!("{:#06X}: {:#?} {:#06X}", self.reg_pc, opcode, instr.word());
 
+        let mut jumped = false;
         match opcode {
             Opcode::Nop => (),
             Opcode::IncC => {
@@ -129,18 +136,11 @@ impl CPU {
                 self.set_bcd_n_flag(false);
                 self.set_bcd_h_flag(overflow);
             }
-            Opcode::LdCd8 => {
-                self.reg_c = instr.byte();
-            }
-            Opcode::Stop => {
-                self.low_power_mode = true;
-            }
-            Opcode::LdDEd16 => {
-                self.write_de(instr.word());
-            }
-            Opcode::LdADE => {
-                self.reg_a = memory.read_byte(self.read_de());
-            }
+            Opcode::LdBd8 => self.reg_b = instr.byte(),
+            Opcode::LdCd8 => self.reg_c = instr.byte(),
+            Opcode::Stop => self.low_power_mode = true,
+            Opcode::LdDEd16 => self.write_de(instr.word()),
+            Opcode::LdADE => self.reg_a = memory.read_byte(self.read_de()),
             Opcode::Jrnz => {
                 let offset = instr.byte() as i8;
                 if self.get_zero_flag() == false {
@@ -152,19 +152,14 @@ impl CPU {
                     }
                 }
             }
-            Opcode::LdHLd16 => {
-                self.write_hl(instr.word());
-            }
-            Opcode::LdSPd16 => {
-                self.reg_sp = instr.word();
-            }
+            Opcode::LdHLd16 => self.write_hl(instr.word()),
+            Opcode::LdSPd16 => self.reg_sp = instr.word(),
             Opcode::LdHLdecA => {
                 memory.write_byte(self.read_hl(), self.reg_a);
                 self.write_hl(self.read_hl() - 1);
             }
-            Opcode::LdAd8 => {
-                self.reg_a = instr.byte();
-            }
+            Opcode::LdAd8 => self.reg_a = instr.byte(),
+            Opcode::LdCA => self.reg_c = self.reg_a,
             Opcode::LdHLA => memory.write_byte(self.read_hl(), self.reg_a),
             Opcode::AddAB => {
                 let old_reg_a = self.reg_a;
@@ -189,6 +184,7 @@ impl CPU {
                 self.reg_a ^= self.reg_a;
                 self.set_zero_flag(self.reg_a == 0);
             }
+            Opcode::PushCB => self.push_stack(memory, self.read_bc()),
             Opcode::Prefix => match instr.cb_opcode() {
                 CbOpcode::SlaB => {
                     let ext_b = (self.reg_b as u16) << 1;
@@ -203,13 +199,16 @@ impl CPU {
                     self.set_bcd_h_flag(true);
                 }
             },
-            Opcode::LdHa8A => {
-                memory.write_byte(0xFF00 + instr.byte() as u16, self.reg_a);
+            Opcode::Calla16 => {
+                self.push_stack(memory, self.reg_pc + instr.length());
+                self.reg_pc = instr.word();
+                jumped = true;
             }
-            Opcode::LdCA => self.reg_c = self.reg_a,
+            Opcode::Ldha8A => memory.write_byte(0xFF00 + instr.byte() as u16, self.reg_a),
+            Opcode::LdhCA => memory.write_byte(0xFF00 + self.reg_c as u16, self.reg_a),
         }
 
-        if jumped == false {
+        if !jumped {
             self.reg_pc += instr.length();
         }
     }
