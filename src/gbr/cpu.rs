@@ -123,19 +123,40 @@ impl CPU {
         self.reg_sp -= 2;
     }
 
+    fn pop_stack(&mut self, memory: &mut Memory) -> u16 {
+        let value = memory.read_word(self.reg_sp);
+        self.reg_sp += 2;
+        value
+    }
+
     pub fn step(&mut self, memory: &mut Memory) {
         let instr = memory.read_instruction(self.reg_pc);
-        let opcode = instr.opcode();
-        println!("{:#06X}: {:#?} {:#06X}", self.reg_pc, opcode, instr.word());
+        let opcode = match instr.opcode() {
+            Some(op) => op,
+            None => panic!(
+                "Unknown instruction {:#04X}\n\n CPU state: {}",
+                memory.read_byte(self.reg_pc),
+                self
+            ),
+        };
 
-        let mut jumped = false;
+        // println!("{:#06X}: {:#?} {:#06X}", self.reg_pc, opcode, instr.word());
+
+        self.reg_pc += instr.length();
+
         match opcode {
             Opcode::Nop => (),
+            Opcode::DecB => self.reg_b = ALU::dec(self, self.reg_b),
             Opcode::IncC => self.reg_c = ALU::inc(self, self.reg_c),
             Opcode::LdBd8 => self.reg_b = instr.byte(),
             Opcode::LdCd8 => self.reg_c = instr.byte(),
             Opcode::Stop => self.low_power_mode = true,
             Opcode::LdDEd16 => self.write_de(instr.word()),
+            Opcode::IncDE => self.write_de(self.read_de() + 1),
+            Opcode::RlA => {
+                self.reg_a = ALU::rlc(self, self.reg_a);
+                self.set_zero_flag(false); // investigate: why this special case?
+            }
             Opcode::LdADE => self.reg_a = memory.read_byte(self.read_de()),
             Opcode::Jrnz => {
                 let offset = instr.byte() as i8;
@@ -149,6 +170,11 @@ impl CPU {
                 }
             }
             Opcode::LdHLd16 => self.write_hl(instr.word()),
+            Opcode::LdHLincA => {
+                memory.write_byte(self.read_hl(), self.reg_a);
+                self.write_hl(self.read_hl() + 1);
+            }
+            Opcode::IncHL => self.write_hl(self.read_hl() + 1),
             Opcode::LdSPd16 => self.reg_sp = instr.word(),
             Opcode::LdHLdecA => {
                 memory.write_byte(self.read_hl(), self.reg_a);
@@ -157,10 +183,16 @@ impl CPU {
             Opcode::LdAd8 => self.reg_a = instr.byte(),
             Opcode::LdCA => self.reg_c = self.reg_a,
             Opcode::LdHLA => memory.write_byte(self.read_hl(), self.reg_a),
+            Opcode::LdAE => self.reg_a = self.reg_e,
             Opcode::AddAB => self.reg_a = ALU::add(self, self.reg_a, self.reg_b),
             Opcode::SubAL => self.reg_a = ALU::sub(self, self.reg_a, self.reg_l),
             Opcode::XorA => self.reg_a = ALU::xor(self, self.reg_a, self.reg_a),
+            Opcode::PopBC => {
+                let value = self.pop_stack(memory);
+                self.write_bc(value);
+            }
             Opcode::PushCB => self.push_stack(memory, self.read_bc()),
+            Opcode::Ret => self.reg_pc = self.pop_stack(memory),
             Opcode::Prefix => match instr.cb_opcode() {
                 CbOpcode::RlcC => self.reg_c = ALU::rlc(self, self.reg_c),
                 CbOpcode::SlaB => self.reg_b = ALU::sla(self, self.reg_b),
@@ -169,14 +201,9 @@ impl CPU {
             Opcode::Calla16 => {
                 self.push_stack(memory, self.reg_pc + instr.length());
                 self.reg_pc = instr.word();
-                jumped = true;
             }
             Opcode::Ldha8A => memory.write_byte(0xFF00 + instr.byte() as u16, self.reg_a),
             Opcode::LdhCA => memory.write_byte(0xFF00 + self.reg_c as u16, self.reg_a),
-        }
-
-        if !jumped {
-            self.reg_pc += instr.length();
         }
     }
 }

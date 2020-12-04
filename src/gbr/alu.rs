@@ -4,10 +4,20 @@ use crate::gbr::cpu::CPU;
 pub struct ALU;
 
 impl ALU {
+    pub fn dec(cpu: &mut CPU, value: u8) -> u8 {
+        let result = value.wrapping_sub(1);
+
+        cpu.set_bcd_h_flag(value == 0x10);
+        cpu.set_bcd_n_flag(true);
+        cpu.set_zero_flag(result == 0);
+
+        result
+    }
+
     pub fn inc(cpu: &mut CPU, value: u8) -> u8 {
         let result = value.wrapping_add(1);
 
-        cpu.set_bcd_h_flag(value & 0x03 != 0);
+        cpu.set_bcd_h_flag(value == 0x0F);
         cpu.set_bcd_n_flag(false);
         cpu.set_zero_flag(result == 0);
 
