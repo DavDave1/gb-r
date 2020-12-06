@@ -144,7 +144,7 @@ impl CPU {
             ),
         };
 
-        // println!("{:#06X}: {:#?} {:#06X}", self.reg_pc, opcode, instr.word());
+        println!("{:#06X}: {:#?} {:#06X}", self.reg_pc, opcode, instr.word());
 
         self.reg_pc += instr.length();
 
@@ -208,6 +208,7 @@ impl CPU {
             }
             Opcode::Ldha8A => bus.write_byte(0xFF00 + instr.byte() as u16, self.reg_a),
             Opcode::LdhCA => bus.write_byte(0xFF00 + self.reg_c as u16, self.reg_a),
+            Opcode::Cpd8 => ALU::cp(self, self.reg_a, instr.byte()),
         }
     }
 }

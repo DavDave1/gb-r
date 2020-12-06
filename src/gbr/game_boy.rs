@@ -7,10 +7,10 @@ pub struct GameBoy {
 }
 
 impl GameBoy {
-    pub fn new(boot_rom_filename: &std::path::Path) -> Self {
+    pub fn new(boot_rom_filename: &std::path::Path, cart_rom_filename: &std::path::Path) -> Self {
         GameBoy {
             cpu: CPU::new(),
-            bus: Bus::new(boot_rom_filename),
+            bus: Bus::new(boot_rom_filename, cart_rom_filename),
         }
     }
 

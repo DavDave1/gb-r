@@ -35,7 +35,8 @@ pub enum Opcode {
     Prefix = 0xCB,
     Calla16 = 0xCD,
     Ldha8A = 0xE0,
-    LdhCA = 0xE2
+    LdhCA = 0xE2,
+    Cpd8 = 0xFE,
 }
 }
 
@@ -115,6 +116,7 @@ impl Instruction {
             Opcode::Calla16 => 3,
             Opcode::Ldha8A => 2,
             Opcode::LdhCA => 1,
+            Opcode::Cpd8 => 2,
         }
     }
 }

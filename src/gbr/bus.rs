@@ -3,6 +3,7 @@ use std::fs;
 use byteorder::{ByteOrder, LittleEndian};
 
 use crate::gbr::instruction::Instruction;
+use crate::gbr::io_registers::IORegisters;
 use crate::gbr::memory_map::*;
 
 #[derive(Default)]
@@ -20,23 +21,31 @@ struct LcdControlRegister {
 pub struct Bus {
     boot_rom_lock: bool,
     boot_rom: Box<[u8]>,
+    cart_rom: Box<[u8]>,
     vram: Box<[u8]>,
+    hram: Box<[u8]>,
     lcd_control_reg: LcdControlRegister,
+    io_registers: IORegisters,
 }
 
 impl Bus {
-    pub fn new(boot_rom_filename: &std::path::Path) -> Self {
+    pub fn new(boot_rom_filename: &std::path::Path, cart_rom_filename: &std::path::Path) -> Self {
         let boot_rom = fs::read(boot_rom_filename).expect("Failed to read boot rom");
 
         if boot_rom.len() != BOOT_ROM_SIZE {
             panic!("Wrong boot rom size");
         }
 
+        let cart_rom = fs::read(cart_rom_filename).expect("Failed to read catridge rom");
+
         Bus {
             boot_rom_lock: true,
             boot_rom: boot_rom.into_boxed_slice(),
+            cart_rom: cart_rom.into_boxed_slice(),
             vram: vec![0; VIDEO_RAM_SIZE].into_boxed_slice(),
+            hram: vec![0; HIGH_RAM_SIZE].into_boxed_slice(),
             lcd_control_reg: LcdControlRegister::default(),
+            io_registers: IORegisters::default(),
         }
     }
 
@@ -55,10 +64,10 @@ impl Bus {
     pub fn read_byte(&self, addr: u16) -> u8 {
         match map_address(addr) {
             MappedAddress::RomBank0(addr) => {
-                if self.boot_rom_lock {
+                if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
                     self.boot_rom[addr as usize]
                 } else {
-                    panic!("Rading from cart bank 0 not implemented");
+                    self.cart_rom[addr as usize]
                 }
             }
             MappedAddress::RomActiveBank(addr) => {
@@ -86,9 +95,7 @@ impl Bus {
             MappedAddress::IORegisters(addr) => {
                 panic!("Reading from IO registers not implemented")
             }
-            MappedAddress::HighRam(addr) => {
-                panic!("Reading from high ram not implemented")
-            }
+            MappedAddress::HighRam(addr) => self.hram[addr as usize],
             MappedAddress::InterruptEnableRegister => {
                 panic!("Reading interrupt enable register not implemented")
             }
@@ -118,11 +125,9 @@ impl Bus {
             MappedAddress::SpriteAttributeTable(addr) => {
                 panic!("Writing toattribute table not implemented")
             }
-            MappedAddress::IORegisters(addr) => {
-                panic!("Writing to IO registers not implemented")
-            }
+            MappedAddress::IORegisters(addr) => self.io_registers.write(addr, value),
             MappedAddress::HighRam(addr) => {
-                panic!("Writing to high ram not implemented")
+                self.hram[addr as usize] = value;
             }
             MappedAddress::InterruptEnableRegister => {
                 panic!("Writing interrupt enable register not implemented")
@@ -165,9 +170,7 @@ impl Bus {
             MappedAddress::IORegisters(addr) => {
                 panic!("Reading from IO registers not implemented")
             }
-            MappedAddress::HighRam(addr) => {
-                panic!("Reading from high ram not implemented")
-            }
+            MappedAddress::HighRam(addr) => LittleEndian::read_u16(&self.hram[addr as usize..]),
             MappedAddress::InterruptEnableRegister => {
                 panic!("Reading interrupt enable register not implemented")
             }

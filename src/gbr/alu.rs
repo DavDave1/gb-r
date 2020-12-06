@@ -94,4 +94,8 @@ impl ALU {
         cpu.set_bcd_n_flag(false);
         cpu.set_zero_flag(value & mask == 0);
     }
+
+    pub fn cp(cpu: &mut CPU, left: u8, right: u8) {
+        ALU::sub(cpu, left, right);
+    }
 }
