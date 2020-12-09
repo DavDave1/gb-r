@@ -20,21 +20,15 @@ pub struct CPU {
     reg_pc: u16, // program counter
     reg_sp: u16, // stack pointer
 
-    boot_rom_lock: bool,
     low_power_mode: bool,
 }
 
 impl CPU {
     pub fn new() -> Self {
         CPU {
-            boot_rom_lock: false,
             low_power_mode: false,
             ..Default::default()
         }
-    }
-
-    pub fn boot_rom_lock(&self) -> bool {
-        self.boot_rom_lock
     }
 
     pub fn read_af(&self) -> u16 {
@@ -71,6 +65,10 @@ impl CPU {
     pub fn write_hl(&mut self, value: u16) {
         self.reg_h = (value >> 8) as u8;
         self.reg_l = value as u8;
+    }
+
+    pub fn read_pc(&self) -> u16 {
+        self.reg_pc
     }
 
     pub fn get_zero_flag(&self) -> bool {
@@ -143,8 +141,6 @@ impl CPU {
                 self
             ),
         };
-
-        println!("{:#06X}: {:#?} {:#06X}", self.reg_pc, opcode, instr.word());
 
         self.reg_pc += instr.length();
 

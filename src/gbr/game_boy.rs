@@ -16,7 +16,19 @@ impl GameBoy {
 
     pub fn run(&mut self) {
         loop {
-            self.cpu.step(&mut self.bus);
+            self.step();
         }
+    }
+
+    pub fn step(&mut self) {
+        self.cpu.step(&mut self.bus);
+    }
+
+    pub fn cpu(&self) -> &CPU {
+        &self.cpu
+    }
+
+    pub fn bus(&self) -> &Bus {
+        &self.bus
     }
 }

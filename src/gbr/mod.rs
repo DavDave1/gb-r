@@ -1,8 +1,8 @@
+pub mod bus;
+pub mod cpu;
 pub mod game_boy;
+pub mod instruction;
+pub mod io_registers;
 
 mod alu;
-mod bus;
-mod cpu;
-mod instruction;
-mod io_registers;
 mod memory_map;
