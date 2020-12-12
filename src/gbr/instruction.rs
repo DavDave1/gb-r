@@ -1,3 +1,5 @@
+use log::error;
+
 extern crate num;
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -66,11 +68,8 @@ impl Instruction {
         Opcode::from_u8(self.opcode)
     }
 
-    pub fn cb_opcode(&self) -> CbOpcode {
-        match CbOpcode::from_u8(self.data[0]) {
-            Some(opcode) => opcode,
-            None => panic!("Unknown cb instruction {:#04X}", self.data[0]),
-        }
+    pub fn cb_opcode(&self) -> Option<CbOpcode> {
+        CbOpcode::from_u8(self.data[0])
     }
 
     pub fn byte(&self) -> u8 {
@@ -81,42 +80,43 @@ impl Instruction {
         LittleEndian::read_u16(&self.data[0..2])
     }
 
-    pub fn length(&self) -> u16 {
-        match self
-            .opcode()
-            .expect("Cannot retreive length of unknown instruction")
-        {
-            Opcode::Nop => 1,
-            Opcode::DecB => 1,
-            Opcode::IncC => 1,
-            Opcode::LdBd8 => 2,
-            Opcode::LdCd8 => 2,
-            Opcode::Stop => 1,
-            Opcode::LdDEd16 => 3,
-            Opcode::IncDE => 1,
-            Opcode::RlA => 1,
-            Opcode::LdADE => 1,
-            Opcode::Jrnz => 2,
-            Opcode::LdHLd16 => 3,
-            Opcode::LdHLincA => 1,
-            Opcode::IncHL => 1,
-            Opcode::LdSPd16 => 3,
-            Opcode::LdHLdecA => 1,
-            Opcode::LdAd8 => 2,
-            Opcode::LdCA => 1,
-            Opcode::LdHLA => 1,
-            Opcode::LdAE => 1,
-            Opcode::AddAB => 1,
-            Opcode::SubAL => 1,
-            Opcode::XorA => 1,
-            Opcode::PopBC => 1,
-            Opcode::PushCB => 1,
-            Opcode::Ret => 1,
-            Opcode::Prefix => 2,
-            Opcode::Calla16 => 3,
-            Opcode::Ldha8A => 2,
-            Opcode::LdhCA => 1,
-            Opcode::Cpd8 => 2,
+    pub fn length(&self) -> Result<u16, ()> {
+        match self.opcode() {
+            Some(Opcode::Nop) => Ok(1),
+            Some(Opcode::DecB) => Ok(1),
+            Some(Opcode::IncC) => Ok(1),
+            Some(Opcode::LdBd8) => Ok(2),
+            Some(Opcode::LdCd8) => Ok(2),
+            Some(Opcode::Stop) => Ok(1),
+            Some(Opcode::LdDEd16) => Ok(3),
+            Some(Opcode::IncDE) => Ok(1),
+            Some(Opcode::RlA) => Ok(1),
+            Some(Opcode::LdADE) => Ok(1),
+            Some(Opcode::Jrnz) => Ok(2),
+            Some(Opcode::LdHLd16) => Ok(3),
+            Some(Opcode::LdHLincA) => Ok(1),
+            Some(Opcode::IncHL) => Ok(1),
+            Some(Opcode::LdSPd16) => Ok(3),
+            Some(Opcode::LdHLdecA) => Ok(1),
+            Some(Opcode::LdAd8) => Ok(2),
+            Some(Opcode::LdCA) => Ok(1),
+            Some(Opcode::LdHLA) => Ok(1),
+            Some(Opcode::LdAE) => Ok(1),
+            Some(Opcode::AddAB) => Ok(1),
+            Some(Opcode::SubAL) => Ok(1),
+            Some(Opcode::XorA) => Ok(1),
+            Some(Opcode::PopBC) => Ok(1),
+            Some(Opcode::PushCB) => Ok(1),
+            Some(Opcode::Ret) => Ok(1),
+            Some(Opcode::Prefix) => Ok(2),
+            Some(Opcode::Calla16) => Ok(3),
+            Some(Opcode::Ldha8A) => Ok(2),
+            Some(Opcode::LdhCA) => Ok(1),
+            Some(Opcode::Cpd8) => Ok(2),
+            None => {
+                error!("Cannot retrieve length of unknown instruction");
+                Err(())
+            }
         }
     }
 }

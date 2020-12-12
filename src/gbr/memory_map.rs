@@ -1,3 +1,5 @@
+use log::error;
+
 pub const MEMORY_SIZE: usize = 0x10000;
 pub const BOOT_ROM_SIZE: usize = 0x100;
 
@@ -46,33 +48,37 @@ pub enum MappedAddress {
     InterruptEnableRegister,
 }
 
-pub fn map_address(addr: u16) -> MappedAddress {
+pub fn map_address(addr: u16) -> Result<MappedAddress, ()> {
     match addr {
-        ROM_BANK0_START..=ROM_BANK0_END => MappedAddress::RomBank0(addr - ROM_BANK0_START),
+        ROM_BANK0_START..=ROM_BANK0_END => Ok(MappedAddress::RomBank0(addr - ROM_BANK0_START)),
         ROM_ACTIVE_BANK_START..=ROM_ACTIVE_BANK_END => {
-            MappedAddress::RomActiveBank(addr - ROM_ACTIVE_BANK_START)
+            Ok(MappedAddress::RomActiveBank(addr - ROM_ACTIVE_BANK_START))
         }
-        VIDEO_RAM_START..=VIDEO_RAM_END => MappedAddress::VideoRam(addr - VIDEO_RAM_START),
+        VIDEO_RAM_START..=VIDEO_RAM_END => Ok(MappedAddress::VideoRam(addr - VIDEO_RAM_START)),
         EXTERNAL_RAM_START..=EXTERNAL_RAM_END => {
-            MappedAddress::ExternalRam(addr - EXTERNAL_RAM_START)
+            Ok(MappedAddress::ExternalRam(addr - EXTERNAL_RAM_START))
         }
         WORK_RAM_BANK0_START..=WORK_RAM_BANK0_END => {
-            MappedAddress::WorkRamBank0(addr - WORK_RAM_BANK0_END)
+            Ok(MappedAddress::WorkRamBank0(addr - WORK_RAM_BANK0_END))
         }
-        WORK_RAM_ACTIVE_BANK_START..=WORK_RAM_ACTIVE_BANK_END => {
-            MappedAddress::WorkRamActiveBank(addr - WORK_RAM_ACTIVE_BANK_START)
+        WORK_RAM_ACTIVE_BANK_START..=WORK_RAM_ACTIVE_BANK_END => Ok(
+            MappedAddress::WorkRamActiveBank(addr - WORK_RAM_ACTIVE_BANK_START),
+        ),
+        ECHO_RAM_START..=ECHO_RAM_END => {
+            error!("Attempted to access echo RAM {:#06X}", addr);
+            Err(())
         }
-        ECHO_RAM_START..=ECHO_RAM_END => panic!("Attempted to access echo RAM {:#06X}", addr),
-        SPRITE_ATTRIBUTE_TABLE_START..=SPRITE_ATTRIBUTE_TABLE_END => {
-            MappedAddress::SpriteAttributeTable(addr - SPRITE_ATTRIBUTE_TABLE_START)
-        }
+        SPRITE_ATTRIBUTE_TABLE_START..=SPRITE_ATTRIBUTE_TABLE_END => Ok(
+            MappedAddress::SpriteAttributeTable(addr - SPRITE_ATTRIBUTE_TABLE_START),
+        ),
         NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => {
-            panic!("Attempted to access not usable RAM {:#06X}", addr)
+            error!("Attempted to access not usable RAM {:#06X}", addr);
+            Err(())
         }
         IO_REGISTERS_START..=IO_REGISTERS_END => {
-            MappedAddress::IORegisters(addr - IO_REGISTERS_START)
+            Ok(MappedAddress::IORegisters(addr - IO_REGISTERS_START))
         }
-        HIGH_RAM_START..=HIGH_RAM_END => MappedAddress::HighRam(addr - HIGH_RAM_START),
-        INTERRUPTS_ENABLE_REGISTER => MappedAddress::InterruptEnableRegister,
+        HIGH_RAM_START..=HIGH_RAM_END => Ok(MappedAddress::HighRam(addr - HIGH_RAM_START)),
+        INTERRUPTS_ENABLE_REGISTER => Ok(MappedAddress::InterruptEnableRegister),
     }
 }

@@ -1,6 +1,15 @@
 use crate::gbr::bus::Bus;
 use crate::gbr::cpu::CPU;
-use crate::gbr::io_registers::IORegisters;
+
+#[macro_export]
+macro_rules! gbr_panic {
+    () =>  ({Err(())});
+    ($msg:expr) => ({ log::error!($msg); Err(()) });
+    ($msg:expr,) => ({ log::error!($msg); Err(()) });
+    ($fmt:expr, $($arg:tt)+) => ({
+        log::error!($fmt, $($arg)+); Err(())
+    });
+}
 
 pub struct GameBoy {
     cpu: CPU,
@@ -15,14 +24,8 @@ impl GameBoy {
         }
     }
 
-    pub fn run(&mut self) {
-        loop {
-            self.step();
-        }
-    }
-
-    pub fn step(&mut self) {
-        self.cpu.step(&mut self.bus);
+    pub fn step(&mut self) -> Result<(), ()> {
+        self.cpu.step(&mut self.bus)
     }
 
     pub fn cpu(&self) -> &CPU {

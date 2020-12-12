@@ -1,4 +1,4 @@
-use std::fmt;
+use log::error;
 
 use crate::gbr::alu::ALU;
 use crate::gbr::bus::Bus;
@@ -123,30 +123,31 @@ impl CPU {
         }
     }
 
-    fn push_stack(&mut self, bus: &mut Bus, value: u16) {
-        bus.write_byte(self.reg_sp - 1, (value >> 8) as u8);
-        bus.write_byte(self.reg_sp - 2, value as u8);
+    fn push_stack(&mut self, bus: &mut Bus, value: u16) -> Result<(), ()> {
+        bus.write_byte(self.reg_sp - 1, (value >> 8) as u8)?;
+        bus.write_byte(self.reg_sp - 2, value as u8)?;
         self.reg_sp -= 2;
+        Ok(())
     }
 
-    fn pop_stack(&mut self, bus: &mut Bus) -> u16 {
-        let value = bus.read_word(self.reg_sp);
+    fn pop_stack(&mut self, bus: &mut Bus) -> Result<u16, ()> {
+        let value = bus.read_word(self.reg_sp)?;
         self.reg_sp += 2;
-        value
+        Ok(value)
     }
 
-    pub fn step(&mut self, bus: &mut Bus) {
-        let instr = bus.fetch_instruction(self.reg_pc);
+    pub fn step(&mut self, bus: &mut Bus) -> Result<(), ()> {
+        let instr = bus.fetch_instruction(self.reg_pc)?;
         let opcode = match instr.opcode() {
             Some(op) => op,
-            None => panic!(
-                "Unknown instruction {:#04X}\n\n CPU state: {}",
-                bus.read_byte(self.reg_pc),
-                self
-            ),
+            None => {
+                let byte = bus.read_byte(self.reg_pc)?;
+                error!("Unknown instruction {:#04X}", byte);
+                return Err(());
+            }
         };
 
-        self.reg_pc += instr.length();
+        self.reg_pc += instr.length()?;
 
         match opcode {
             Opcode::Nop => (),
@@ -161,7 +162,7 @@ impl CPU {
                 self.reg_a = ALU::rlc(self, self.reg_a);
                 self.set_zero_flag(false); // investigate: why this special case?
             }
-            Opcode::LdADE => self.reg_a = bus.read_byte(self.read_de()),
+            Opcode::LdADE => self.reg_a = bus.read_byte(self.read_de())?,
             Opcode::Jrnz => {
                 let offset = instr.byte() as i8;
                 if self.get_zero_flag() == false {
@@ -175,59 +176,46 @@ impl CPU {
             }
             Opcode::LdHLd16 => self.write_hl(instr.word()),
             Opcode::LdHLincA => {
-                bus.write_byte(self.read_hl(), self.reg_a);
+                bus.write_byte(self.read_hl(), self.reg_a)?;
                 self.write_hl(self.read_hl() + 1);
             }
             Opcode::IncHL => self.write_hl(self.read_hl() + 1),
             Opcode::LdSPd16 => self.reg_sp = instr.word(),
             Opcode::LdHLdecA => {
-                bus.write_byte(self.read_hl(), self.reg_a);
+                bus.write_byte(self.read_hl(), self.reg_a)?;
                 self.write_hl(self.read_hl() - 1);
             }
             Opcode::LdAd8 => self.reg_a = instr.byte(),
             Opcode::LdCA => self.reg_c = self.reg_a,
-            Opcode::LdHLA => bus.write_byte(self.read_hl(), self.reg_a),
+            Opcode::LdHLA => bus.write_byte(self.read_hl(), self.reg_a)?,
             Opcode::LdAE => self.reg_a = self.reg_e,
             Opcode::AddAB => self.reg_a = ALU::add(self, self.reg_a, self.reg_b),
             Opcode::SubAL => self.reg_a = ALU::sub(self, self.reg_a, self.reg_l),
             Opcode::XorA => self.reg_a = ALU::xor(self, self.reg_a, self.reg_a),
             Opcode::PopBC => {
-                let value = self.pop_stack(bus);
+                let value = self.pop_stack(bus)?;
                 self.write_bc(value);
             }
-            Opcode::PushCB => self.push_stack(bus, self.read_bc()),
-            Opcode::Ret => self.reg_pc = self.pop_stack(bus),
+            Opcode::PushCB => self.push_stack(bus, self.read_bc())?,
+            Opcode::Ret => self.reg_pc = self.pop_stack(bus)?,
             Opcode::Prefix => match instr.cb_opcode() {
-                CbOpcode::RlcC => self.reg_c = ALU::rlc(self, self.reg_c),
-                CbOpcode::SlaB => self.reg_b = ALU::sla(self, self.reg_b),
-                CbOpcode::Bit7H => ALU::test_bit(self, self.reg_h, 7),
+                Some(CbOpcode::RlcC) => self.reg_c = ALU::rlc(self, self.reg_c),
+                Some(CbOpcode::SlaB) => self.reg_b = ALU::sla(self, self.reg_b),
+                Some(CbOpcode::Bit7H) => ALU::test_bit(self, self.reg_h, 7),
+                None => {
+                    error!("Unknown cb instruction {:#04X}", instr.byte());
+                    return Err(());
+                }
             },
             Opcode::Calla16 => {
-                self.push_stack(bus, self.reg_pc + instr.length());
+                let instr_len = instr.length()?;
+                self.push_stack(bus, self.reg_pc + instr_len)?;
                 self.reg_pc = instr.word();
             }
-            Opcode::Ldha8A => bus.write_byte(0xFF00 + instr.byte() as u16, self.reg_a),
-            Opcode::LdhCA => bus.write_byte(0xFF00 + self.reg_c as u16, self.reg_a),
+            Opcode::Ldha8A => bus.write_byte(0xFF00 + instr.byte() as u16, self.reg_a)?,
+            Opcode::LdhCA => bus.write_byte(0xFF00 + self.reg_c as u16, self.reg_a)?,
             Opcode::Cpd8 => ALU::cp(self, self.reg_a, instr.byte()),
-        }
-    }
-}
-
-impl fmt::Display for CPU {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Regs: AF {:#06X}, BC {:#06X}, DE {:#06X}, HL {:#06X}, PC {:#06X}, SP {:#06X} | Flags: Z {}, C {}, BCD-N {}, BCD-H {}",
-            self.read_af(),
-            self.read_bc(),
-            self.read_de(),
-            self.read_hl(),
-            self.reg_pc,
-            self.reg_sp,
-            self.get_zero_flag(),
-            self.get_carry_flag(),
-            self.get_bcd_n_flag(),
-            self.get_bcd_h_flag()
-        )
+        };
+        Ok(())
     }
 }

@@ -1,3 +1,4 @@
+use log::error;
 use std::fmt;
 
 use crate::gbr::game_boy::GameBoy;
@@ -43,6 +44,7 @@ impl fmt::Display for CpuState {
 pub struct Debugger {
     emu: GameBoy,
     is_running: bool,
+    panicked: bool,
 }
 
 impl Debugger {
@@ -50,11 +52,20 @@ impl Debugger {
         Debugger {
             emu: game_boy,
             is_running: false,
+            panicked: false,
         }
     }
 
     pub fn step(&mut self) {
-        self.emu.step();
+        if self.panicked {
+            error!("Cannot step because system is panicked");
+            self.is_running = false;
+        } else {
+            match self.emu.step() {
+                Ok(()) => (),
+                Err(()) => self.panicked = true,
+            }
+        }
     }
 
     pub fn set_running(&mut self, is_running: bool) {
@@ -65,16 +76,28 @@ impl Debugger {
         self.is_running
     }
 
-    pub fn disassemble(&self) -> Vec<(u16, Instruction)> {
+    pub fn disassemble(&self) -> Vec<(u16, Option<Instruction>)> {
         let cpu = self.emu.cpu();
         let mut pc = cpu.read_pc();
 
-        let mut disassembly = Vec::<(u16, Instruction)>::new();
+        let mut disassembly = Vec::<(u16, Option<Instruction>)>::new();
 
         for _ in 0..20 {
-            let instr = self.emu.bus().fetch_instruction(pc);
-            let new_pc = pc + instr.length();
-            disassembly.push((pc, instr));
+            let instruction = match self.emu.bus().fetch_instruction(pc) {
+                Ok(instr) => instr,
+                Err(()) => {
+                    disassembly.push((pc, None));
+                    continue;
+                }
+            };
+
+            let new_pc = pc
+                + match instruction.opcode() {
+                    Some(_) => instruction.length().unwrap(),
+                    None => 1,
+                };
+
+            disassembly.push((pc, Some(instruction)));
             pc = new_pc;
         }
 
