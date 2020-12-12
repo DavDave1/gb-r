@@ -71,6 +71,10 @@ impl CPU {
         self.reg_pc
     }
 
+    pub fn read_sp(&self) -> u16 {
+        self.reg_sp
+    }
+
     pub fn get_zero_flag(&self) -> bool {
         self.reg_f & 0b10000000 != 0
     }

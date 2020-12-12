@@ -49,6 +49,10 @@ impl Bus {
         }
     }
 
+    pub fn io_registers(&self) -> &IORegisters {
+        &self.io_registers
+    }
+
     pub fn fetch_instruction(&self, addr: u16) -> Instruction {
         match map_address(addr) {
             MappedAddress::RomBank0(addr) => {

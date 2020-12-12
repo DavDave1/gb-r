@@ -4,21 +4,19 @@ use cursive::Printer;
 
 use crate::debugger::debugger::Debugger;
 
-pub struct DebuggerView {
+pub struct AsmView {
     debugger: Arc<Mutex<Debugger>>,
 }
 
-impl DebuggerView {
+impl AsmView {
     pub fn new(debugger: Arc<Mutex<Debugger>>) -> Self {
-        DebuggerView { debugger: debugger }
+        AsmView { debugger: debugger }
     }
 }
 
-impl cursive::view::View for DebuggerView {
+impl cursive::view::View for AsmView {
     fn draw(&self, printer: &Printer) {
         let d = self.debugger.lock().unwrap();
-
-        printer.print((0, 0), "ASM:");
 
         for (i, (pc, instr)) in d.disassemble().iter().enumerate() {
             let mut data_str = String::new();
@@ -36,7 +34,7 @@ impl cursive::view::View for DebuggerView {
             }
 
             printer.print(
-                (0, i + 1),
+                (1, i),
                 format!("{:#06X}: {} {}", pc, opcode_str, data_str).as_str(),
             );
         }

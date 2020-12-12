@@ -1,5 +1,6 @@
 use crate::gbr::bus::Bus;
 use crate::gbr::cpu::CPU;
+use crate::gbr::io_registers::IORegisters;
 
 pub struct GameBoy {
     cpu: CPU,
