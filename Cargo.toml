@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
  byteorder = "1.3.4"  
- cursive = "0.15.0"
+ cursive = { version = "0.15.0", default-features = false, features = ["crossterm-backend"]}
  cursive-tabs = "^0"
  cursive-flexi-logger-view = "^0"
  enum_primitive = "*"

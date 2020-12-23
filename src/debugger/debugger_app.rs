@@ -31,8 +31,6 @@ impl DebuggerApp {
         self.init_logger();
         self.init_ui();
 
-        self.siv.set_fps(60);
-
         while self.siv.is_running() {
             self.siv.step();
 
