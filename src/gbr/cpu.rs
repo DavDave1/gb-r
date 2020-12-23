@@ -136,6 +136,15 @@ impl CPU {
         Ok(value)
     }
 
+    fn jump(&mut self, offset: i8) {
+        // TODO: find a better way to to this
+        if offset < 0 {
+            self.reg_pc -= offset.abs() as u16;
+        } else {
+            self.reg_pc += offset as u16;
+        }
+    }
+
     pub fn step(&mut self, bus: &mut Bus) -> Result<(), ()> {
         let instr = bus.fetch_instruction(self.reg_pc)?;
         let opcode = match instr.opcode() {
@@ -164,14 +173,13 @@ impl CPU {
             }
             Opcode::LdADE => self.reg_a = bus.read_byte(self.read_de())?,
             Opcode::Jrnz => {
-                let offset = instr.byte() as i8;
                 if self.get_zero_flag() == false {
-                    // TODO: find a better way to to this
-                    if offset < 0 {
-                        self.reg_pc -= offset.abs() as u16;
-                    } else {
-                        self.reg_pc += offset as u16;
-                    }
+                    self.jump(instr.byte() as i8);
+                }
+            }
+            Opcode::Jrz => {
+                if self.get_zero_flag() == true {
+                    self.jump(instr.byte() as i8);
                 }
             }
             Opcode::LdHLd16 => self.write_hl(instr.word()),
@@ -185,6 +193,7 @@ impl CPU {
                 bus.write_byte(self.read_hl(), self.reg_a)?;
                 self.write_hl(self.read_hl() - 1);
             }
+            Opcode::DecA => self.reg_a = ALU::dec(self, self.reg_a),
             Opcode::LdAd8 => self.reg_a = instr.byte(),
             Opcode::LdCA => self.reg_c = self.reg_a,
             Opcode::LdHLA => bus.write_byte(self.read_hl(), self.reg_a)?,
@@ -213,6 +222,7 @@ impl CPU {
                 self.reg_pc = instr.word();
             }
             Opcode::Ldha8A => bus.write_byte(0xFF00 + instr.byte() as u16, self.reg_a)?,
+            Opcode::Lda16A => self.reg_a = bus.read_byte(instr.word())?,
             Opcode::LdhCA => bus.write_byte(0xFF00 + self.reg_c as u16, self.reg_a)?,
             Opcode::Cpd8 => ALU::cp(self, self.reg_a, instr.byte()),
         };
