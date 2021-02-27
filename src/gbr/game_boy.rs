@@ -1,16 +1,6 @@
 use crate::gbr::bus::Bus;
 use crate::gbr::cpu::CPU;
 
-#[macro_export]
-macro_rules! gbr_panic {
-    () =>  ({Err(())});
-    ($msg:expr) => ({ log::error!($msg); Err(()) });
-    ($msg:expr,) => ({ log::error!($msg); Err(()) });
-    ($fmt:expr, $($arg:tt)+) => ({
-        log::error!($fmt, $($arg)+); Err(())
-    });
-}
-
 pub struct GameBoy {
     cpu: CPU,
     bus: Bus,

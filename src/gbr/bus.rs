@@ -7,25 +7,12 @@ use crate::gbr::instruction::Instruction;
 use crate::gbr::io_registers::IORegisters;
 use crate::gbr::memory_map::*;
 
-#[derive(Default)]
-struct LcdControlRegister {
-    lcd_display_enable: bool,
-    window_tile_map_display_select: bool,
-    window_display_enable: bool,
-    bg_and_window_tile_data_select: bool,
-    bg_tile_map_display_select: bool,
-    sprite_size_enable: bool,
-    sprite_display_enable: bool,
-    bg_window_display_priority: bool,
-}
-
 pub struct Bus {
     boot_rom_lock: bool,
     boot_rom: Box<[u8]>,
     cart_rom: Box<[u8]>,
     vram: Box<[u8]>,
     hram: Box<[u8]>,
-    lcd_control_reg: LcdControlRegister,
     io_registers: IORegisters,
 }
 
@@ -45,7 +32,6 @@ impl Bus {
             cart_rom: cart_rom.into_boxed_slice(),
             vram: vec![0; VIDEO_RAM_SIZE].into_boxed_slice(),
             hram: vec![0; HIGH_RAM_SIZE].into_boxed_slice(),
-            lcd_control_reg: LcdControlRegister::default(),
             io_registers: IORegisters::default(),
         }
     }
@@ -86,7 +72,7 @@ impl Bus {
                 Err(())
             }
             MappedAddress::VideoRam(addr) => {
-                if self.lcd_control_reg.lcd_display_enable == false {
+                if self.io_registers.lcd_control().display_enable() == false {
                     Ok(self.vram[addr as usize])
                 } else {
                     error!("Cannot read vram whle lcd is active");
@@ -109,10 +95,7 @@ impl Bus {
                 error!("Reading sprite attribute table not implemented");
                 Err(())
             }
-            MappedAddress::IORegisters(addr) => {
-                error!("Reading from IO registers not implemented");
-                Err(())
-            }
+            MappedAddress::IORegisters(addr) => self.io_registers.read(addr),
             MappedAddress::HighRam(addr) => Ok(self.hram[addr as usize]),
             MappedAddress::InterruptEnableRegister => {
                 error!("Reading interrupt enable register not implemented");
@@ -132,7 +115,7 @@ impl Bus {
                 Err(())
             }
             MappedAddress::VideoRam(addr) => {
-                if self.lcd_control_reg.lcd_display_enable == false {
+                if self.io_registers.lcd_control().display_enable() == false {
                     self.vram[addr as usize] = value;
                     Ok(())
                 } else {
@@ -186,7 +169,7 @@ impl Bus {
                 Err(())
             }
             MappedAddress::VideoRam(addr) => {
-                if self.lcd_control_reg.lcd_display_enable == false {
+                if self.io_registers.lcd_control().display_enable() == false {
                     Ok(LittleEndian::read_u16(&self.vram[addr as usize..]))
                 } else {
                     error!("Cannot read vram whle lcd is active");

@@ -161,9 +161,12 @@ impl CPU {
         match opcode {
             Opcode::Nop => (),
             Opcode::DecB => self.reg_b = ALU::dec(self, self.reg_b),
+            Opcode::IncB => self.reg_c = ALU::inc(self, self.reg_b),
             Opcode::IncC => self.reg_c = ALU::inc(self, self.reg_c),
+            Opcode::DecC => self.reg_c = ALU::dec(self, self.reg_c),
             Opcode::LdBd8 => self.reg_b = instr.byte(),
             Opcode::LdCd8 => self.reg_c = instr.byte(),
+            Opcode::LdEd8 => self.reg_e = instr.byte(),
             Opcode::Stop => self.low_power_mode = true,
             Opcode::LdDEd16 => self.write_de(instr.word()),
             Opcode::IncDE => self.write_de(self.read_de() + 1),
@@ -172,6 +175,7 @@ impl CPU {
                 self.set_zero_flag(false); // investigate: why this special case?
             }
             Opcode::LdADE => self.reg_a = bus.read_byte(self.read_de())?,
+            Opcode::Jr => self.jump(instr.byte() as i8),
             Opcode::Jrnz => {
                 if self.get_zero_flag() == false {
                     self.jump(instr.byte() as i8);
@@ -188,6 +192,7 @@ impl CPU {
                 self.write_hl(self.read_hl() + 1);
             }
             Opcode::IncHL => self.write_hl(self.read_hl() + 1),
+            Opcode::LdLd8 => self.reg_l = instr.byte(),
             Opcode::LdSPd16 => self.reg_sp = instr.word(),
             Opcode::LdHLdecA => {
                 bus.write_byte(self.read_hl(), self.reg_a)?;
@@ -196,6 +201,8 @@ impl CPU {
             Opcode::DecA => self.reg_a = ALU::dec(self, self.reg_a),
             Opcode::LdAd8 => self.reg_a = instr.byte(),
             Opcode::LdCA => self.reg_c = self.reg_a,
+            Opcode::LdDA => self.reg_d = self.reg_a,
+            Opcode::LdHA => self.reg_h = self.reg_a,
             Opcode::LdHLA => bus.write_byte(self.read_hl(), self.reg_a)?,
             Opcode::LdAE => self.reg_a = self.reg_e,
             Opcode::AddAB => self.reg_a = ALU::add(self, self.reg_a, self.reg_b),
@@ -224,6 +231,7 @@ impl CPU {
             Opcode::Ldha8A => bus.write_byte(0xFF00 + instr.byte() as u16, self.reg_a)?,
             Opcode::Lda16A => self.reg_a = bus.read_byte(instr.word())?,
             Opcode::LdhCA => bus.write_byte(0xFF00 + self.reg_c as u16, self.reg_a)?,
+            Opcode::LdhAa8 => self.reg_a = bus.read_byte(0xFF00 + instr.byte() as u16)?,
             Opcode::Cpd8 => ALU::cp(self, self.reg_a, instr.byte()),
         };
         Ok(())

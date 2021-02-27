@@ -85,5 +85,10 @@ impl cursive::view::View for IORegistersView {
             )
             .as_str(),
         );
+
+        printer.print(
+            (0, 9),
+            format!("LCD control: {:#010b}", io_regs.lcd_control().raw()).as_str(),
+        );
     }
 }

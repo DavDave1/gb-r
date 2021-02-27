@@ -4,6 +4,7 @@ use std::fmt;
 use crate::gbr::game_boy::GameBoy;
 use crate::gbr::instruction::Instruction;
 use crate::gbr::io_registers::IORegisters;
+use crate::gbr::video_driver::VideoDriver;
 
 pub struct CpuState {
     pub af: u16,
@@ -43,6 +44,7 @@ impl fmt::Display for CpuState {
 
 pub struct Debugger {
     emu: GameBoy,
+    video_driver: VideoDriver,
     is_running: bool,
     panicked: bool,
 }
@@ -51,6 +53,7 @@ impl Debugger {
     pub fn new(game_boy: GameBoy) -> Self {
         Debugger {
             emu: game_boy,
+            video_driver: VideoDriver::new(190, 144),
             is_running: false,
             panicked: false,
         }
@@ -65,6 +68,7 @@ impl Debugger {
                 Ok(()) => (),
                 Err(()) => self.panicked = true,
             }
+            self.video_driver.draw(&self.emu);
         }
     }
 
