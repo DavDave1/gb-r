@@ -5,7 +5,7 @@ use log::error;
 
 use crate::gbr::memory_map::*;
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct IORegisters {
     reg_port_p1: u8,
     reg_serial_data: u8,

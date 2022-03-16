@@ -29,6 +29,7 @@ impl From<u8> for GrayShade {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct BackgroundPalette {
     color_0: GrayShade,
     color_1: GrayShade,

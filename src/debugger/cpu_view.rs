@@ -1,23 +1,22 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use cursive::Printer;
 
 use crate::debugger::debugger::Debugger;
 
 pub struct CpuView {
-    debugger: Arc<Mutex<Debugger>>,
+    debugger: Arc<Debugger>,
 }
 
 impl CpuView {
-    pub fn new(debugger: Arc<Mutex<Debugger>>) -> Self {
-        CpuView { debugger: debugger }
+    pub fn new(debugger: Arc<Debugger>) -> Self {
+        CpuView { debugger }
     }
 }
 
 impl cursive::view::View for CpuView {
     fn draw(&self, printer: &Printer) {
-        let d = self.debugger.lock().unwrap();
-        let state = d.cpu_state();
+        let state = self.debugger.cpu_state();
 
         printer.print((0, 0), "Registers:");
         printer.print(

@@ -1,4 +1,4 @@
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct LcdControlRegister {
     reg_value: u8,
 }

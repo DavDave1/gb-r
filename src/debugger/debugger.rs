@@ -1,93 +1,40 @@
-use log::error;
-use std::fmt;
+use std::sync::RwLock;
 
+use crate::gbr::cpu::CpuState;
 use crate::gbr::game_boy::GameBoy;
 use crate::gbr::instruction::Instruction;
 use crate::gbr::io_registers::IORegisters;
 use crate::gbr::video_driver::VideoDriver;
 
-pub struct CpuState {
-    pub af: u16,
-    pub bc: u16,
-    pub de: u16,
-    pub hl: u16,
-    pub pc: u16,
-    pub sp: u16,
-
-    pub zero: bool,
-    pub carry: bool,
-    pub bcd_n: bool,
-    pub bcd_h: bool,
-}
-
-impl fmt::Display for CpuState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Regsisters:\n
-            AF {:#06X}, BC {:#06X}, DE {:#06X}, HL {:#06X}, PC {:#06X}, SP {:#06X}\n
-            Flags:\n
-            Z {}, C {}, BCD-N {}, BCD-H {}",
-            self.af,
-            self.bc,
-            self.de,
-            self.hl,
-            self.pc,
-            self.sp,
-            self.zero,
-            self.carry,
-            self.bcd_n,
-            self.bcd_h
-        )
-    }
-}
-
 pub struct Debugger {
-    emu: GameBoy,
-    video_driver: VideoDriver,
-    is_running: bool,
-    panicked: bool,
+    emu: RwLock<GameBoy>,
+    // video_driver: VideoDriver,
 }
 
 impl Debugger {
     pub fn new(game_boy: GameBoy) -> Self {
         Debugger {
-            emu: game_boy,
-            video_driver: VideoDriver::new(190, 144),
-            is_running: false,
-            panicked: false,
+            emu: RwLock::new(game_boy),
+            // video_driver: VideoDriver::new(190, 144),
         }
     }
 
-    pub fn step(&mut self) {
-        if self.panicked {
-            error!("Cannot step because system is panicked");
-            self.is_running = false;
-        } else {
-            match self.emu.step() {
-                Ok(()) => (),
-                Err(()) => self.panicked = true,
-            }
-            self.video_driver.draw(&self.emu);
+    pub fn step(&self) -> bool {
+        let mut emu = self.emu.write().unwrap();
+        match emu.step() {
+            Ok(()) => true,
+            Err(()) => false,
         }
-    }
-
-    pub fn set_running(&mut self, is_running: bool) {
-        self.is_running = is_running;
-    }
-
-    pub fn is_running(&self) -> bool {
-        self.is_running
+        // self.video_driver.draw(&self.emu);
     }
 
     pub fn disassemble(&self) -> Vec<(u16, Option<Instruction>)> {
-        let cpu = self.emu.cpu();
-        let mut pc = cpu.read_pc();
+        let mut pc = self.emu.read().unwrap().cpu().read_pc();
 
         let mut disassembly = Vec::<(u16, Option<Instruction>)>::new();
 
         for _ in 0..20 {
-            let instruction = match self.emu.bus().fetch_instruction(pc) {
+            let instruction = match self.emu.read().unwrap().bus().fetch_instruction(pc) {
                 Ok(instr) => instr,
                 Err(()) => {
                     disassembly.push((pc, None));
@@ -109,23 +56,10 @@ impl Debugger {
     }
 
     pub fn cpu_state(&self) -> CpuState {
-        let cpu = self.emu.cpu();
-
-        CpuState {
-            af: cpu.read_af(),
-            bc: cpu.read_bc(),
-            de: cpu.read_de(),
-            hl: cpu.read_hl(),
-            pc: cpu.read_pc(),
-            sp: cpu.read_sp(),
-            zero: cpu.get_zero_flag(),
-            carry: cpu.get_carry_flag(),
-            bcd_h: cpu.get_bcd_h_flag(),
-            bcd_n: cpu.get_bcd_n_flag(),
-        }
+        self.emu.read().unwrap().cpu().state()
     }
 
-    pub fn io_registers(&self) -> &IORegisters {
-        &self.emu.bus().io_registers()
+    pub fn io_registers(&self) -> IORegisters {
+        *self.emu.read().unwrap().bus().io_registers()
     }
 }

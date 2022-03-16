@@ -1,10 +1,12 @@
+use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
+use std::thread;
 
-use cursive::traits::*;
 use cursive::views::{LinearLayout, Panel, ResizedView, SelectView};
+use cursive::{traits::*, CursiveExt};
 use cursive_flexi_logger_view::FlexiLoggerView;
 use cursive_tabs::TabPanel;
-use flexi_logger::{LogTarget, Logger};
+use flexi_logger::Logger;
 
 use crate::debugger::asm_view::AsmView;
 use crate::debugger::commands::*;
@@ -14,62 +16,73 @@ use crate::debugger::io_registers_view::IORegistersView;
 
 use crate::gbr::game_boy::GameBoy;
 
+fn backend_init() -> std::io::Result<Box<dyn cursive::backend::Backend>> {
+    let backend = cursive::backends::crossterm::Backend::init()?;
+    let buffered_backend = cursive_buffered_backend::BufferedBackend::new(backend);
+    Ok(Box::new(buffered_backend))
+}
+
 pub struct DebuggerApp {
-    debugger: Arc<Mutex<Debugger>>,
-    siv: cursive::Cursive,
+    debugger: Arc<Debugger>,
 }
 
 impl DebuggerApp {
     pub fn new(game_boy: GameBoy) -> Self {
         DebuggerApp {
-            debugger: Arc::new(Mutex::new(Debugger::new(game_boy))),
-            siv: cursive::default(),
+            debugger: Arc::new(Debugger::new(game_boy)),
         }
     }
 
     pub fn run(&mut self) {
-        self.init_logger();
-        self.init_ui();
+        let mut siv = cursive::Cursive::new();
+        siv.set_autorefresh(true);
 
-        while self.siv.is_running() {
-            self.siv.step();
+        let (start_sig, start_slot) = channel::<i64>();
 
-            let mut d = self.debugger.lock().unwrap();
+        self.init_logger(&siv);
+        self.init_ui(&mut siv, start_sig);
 
-            if d.is_running() {
-                d.step();
+        let debugger = self.debugger.clone();
+        thread::spawn(move || loop {
+            let steps_count = start_slot.recv().unwrap();
+
+            let mut curr_step = 0;
+            while steps_count < 0 || curr_step < steps_count {
+                debugger.step();
+                if start_slot.try_recv().is_ok() {
+                    break;
+                }
+                curr_step += 1;
             }
-        }
+        });
+
+        siv.try_run_with(backend_init)
+            .expect("Failed tu run cursive app");
     }
 
-    fn init_logger(&self) {
-        Logger::with_env_or_str("info")
-            .log_target(LogTarget::FileAndWriter(
-                cursive_flexi_logger_view::cursive_flexi_logger(&self.siv),
-            ))
-            .directory("logs")
-            .suppress_timestamp()
+    fn init_logger(&self, siv: &cursive::Cursive) {
+        Logger::try_with_env_or_str("info")
+            .expect("Could not create logger")
+            .log_to_file_and_writer(
+                flexi_logger::FileSpec::default()
+                    .directory("logs")
+                    .suppress_timestamp(),
+                cursive_flexi_logger_view::cursive_flexi_logger(&siv),
+            )
             .format(flexi_logger::colored_with_thread)
             .start()
             .expect("failed to initialize logger!");
     }
 
-    fn init_ui(&mut self) {
-        let debugger = self.debugger.clone();
-
+    fn init_ui(&mut self, siv: &mut cursive::Cursive, start_sig: Sender<i64>) {
         let commands_list = SelectView::new()
             .item("Run/Stop", Command::RunStop)
-            .item("Run detached", Command::RunDetached)
             .item("Step", Command::Step)
             .item("Quit", Command::Quit)
-            .on_submit(move |s, command| {
-                let mut d = debugger.lock().unwrap();
-                match *command {
-                    Command::RunStop => command_run_stop(s, &mut d),
-                    Command::RunDetached => command_run_detached(s, &mut d),
-                    Command::Step => command_step(s, &mut d),
-                    Command::Quit => s.quit(),
-                }
+            .on_submit(move |s, command| match *command {
+                Command::RunStop => command_run_stop(s, start_sig.clone()),
+                Command::Step => command_step(s, start_sig.clone()),
+                Command::Quit => s.quit(),
             })
             .with_name("commands");
 
@@ -83,9 +96,9 @@ impl DebuggerApp {
         let regs_view = ResizedView::with_full_height(IORegistersView::new(self.debugger.clone()));
 
         let mut debugger_tabs = TabPanel::new()
-            .with_tab("ASM", asm_view)
-            .with_tab("CPU", cpu_view)
-            .with_tab("IO Registers", regs_view);
+            .with_tab(asm_view.with_name("ASM"))
+            .with_tab(cpu_view.with_name("CPU"))
+            .with_tab(regs_view.with_name("IO Registers"));
 
         debugger_tabs.set_active_tab("ASM").unwrap();
 
@@ -97,7 +110,7 @@ impl DebuggerApp {
                 .title("Log view"),
         );
 
-        self.siv.add_fullscreen_layer(
+        siv.add_fullscreen_layer(
             LinearLayout::vertical()
                 .child(ResizedView::with_full_height(
                     LinearLayout::horizontal()

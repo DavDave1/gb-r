@@ -1,24 +1,22 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use cursive::Printer;
 
 use crate::debugger::debugger::Debugger;
 
 pub struct AsmView {
-    debugger: Arc<Mutex<Debugger>>,
+    debugger: Arc<Debugger>,
 }
 
 impl AsmView {
-    pub fn new(debugger: Arc<Mutex<Debugger>>) -> Self {
-        AsmView { debugger: debugger }
+    pub fn new(debugger: Arc<Debugger>) -> Self {
+        AsmView { debugger }
     }
 }
 
 impl cursive::view::View for AsmView {
     fn draw(&self, printer: &Printer) {
-        let d = self.debugger.lock().unwrap();
-
-        for (i, (pc, instruction)) in d.disassemble().iter().enumerate() {
+        for (i, (pc, instruction)) in self.debugger.disassemble().iter().enumerate() {
             match instruction {
                 Some(instr) => {
                     let mut data_str = String::new();

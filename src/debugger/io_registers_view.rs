@@ -1,23 +1,22 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use cursive::Printer;
 
 use crate::debugger::debugger::Debugger;
 
 pub struct IORegistersView {
-    debugger: Arc<Mutex<Debugger>>,
+    debugger: Arc<Debugger>,
 }
 
 impl IORegistersView {
-    pub fn new(debugger: Arc<Mutex<Debugger>>) -> Self {
-        IORegistersView { debugger: debugger }
+    pub fn new(debugger: Arc<Debugger>) -> Self {
+        IORegistersView { debugger }
     }
 }
 
 impl cursive::view::View for IORegistersView {
     fn draw(&self, printer: &Printer) {
-        let d = self.debugger.lock().unwrap();
-        let io_regs = d.io_registers();
+        let io_regs = self.debugger.io_registers();
 
         printer.print(
             (0, 0),
