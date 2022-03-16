@@ -1,22 +1,17 @@
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use crate::gbr::cpu::CpuState;
 use crate::gbr::game_boy::GameBoy;
 use crate::gbr::instruction::Instruction;
 use crate::gbr::io_registers::IORegisters;
-use crate::gbr::video_driver::VideoDriver;
 
 pub struct Debugger {
-    emu: RwLock<GameBoy>,
-    // video_driver: VideoDriver,
+    pub emu: Arc<RwLock<GameBoy>>,
 }
 
 impl Debugger {
-    pub fn new(game_boy: GameBoy) -> Self {
-        Debugger {
-            emu: RwLock::new(game_boy),
-            // video_driver: VideoDriver::new(190, 144),
-        }
+    pub fn new(game_boy: Arc<RwLock<GameBoy>>) -> Self {
+        Debugger { emu: game_boy }
     }
 
     pub fn step(&self) -> bool {
@@ -25,7 +20,6 @@ impl Debugger {
             Ok(()) => true,
             Err(()) => false,
         }
-        // self.video_driver.draw(&self.emu);
     }
 
     pub fn disassemble(&self) -> Vec<(u16, Option<Instruction>)> {

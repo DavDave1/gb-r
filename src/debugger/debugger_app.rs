@@ -1,5 +1,5 @@
 use std::sync::mpsc::{channel, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use std::thread;
 
 use cursive::views::{LinearLayout, Panel, ResizedView, SelectView};
@@ -15,6 +15,7 @@ use crate::debugger::debugger::Debugger;
 use crate::debugger::io_registers_view::IORegistersView;
 
 use crate::gbr::game_boy::GameBoy;
+use crate::gbr::video_driver::VideoDriver;
 
 fn backend_init() -> std::io::Result<Box<dyn cursive::backend::Backend>> {
     let backend = cursive::backends::crossterm::Backend::init()?;
@@ -27,9 +28,9 @@ pub struct DebuggerApp {
 }
 
 impl DebuggerApp {
-    pub fn new(game_boy: GameBoy) -> Self {
+    pub fn new(game_boy: Arc<RwLock<GameBoy>>) -> Self {
         DebuggerApp {
-            debugger: Arc::new(Debugger::new(game_boy)),
+            debugger: Arc::new(Debugger::new(game_boy.clone())),
         }
     }
 
@@ -54,6 +55,14 @@ impl DebuggerApp {
                 }
                 curr_step += 1;
             }
+        });
+
+        let game_boy = self.debugger.emu.clone();
+        thread::spawn(|| {
+            log::info!("creating video");
+            let mut driver = VideoDriver::new(game_boy, 190, 144);
+
+            driver.start().expect("Failed to start video driver");
         });
 
         siv.try_run_with(backend_init)

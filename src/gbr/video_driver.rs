@@ -1,37 +1,67 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use beryllium::*;
+use beryllium::{
+    event::Event,
+    init::{InitFlags, Sdl},
+    window::WindowFlags,
+};
+use fermium::keycode;
 use pixels::{Pixels, SurfaceTexture};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
+use zstring::zstr;
 
 use crate::gbr::game_boy::GameBoy;
 
 pub struct VideoDriver {
-    sdl: beryllium::SDL,
-    window: beryllium::RawWindow,
-    pixels: Pixels<beryllium::RawWindow>,
+    emu: Arc<RwLock<GameBoy>>,
+    width: u32,
+    height: u32,
 }
 
 impl VideoDriver {
-    pub fn new(width: u32, height: u32) -> Self {
-        let sdl = SDL::init(InitFlags::default()).expect("Failed to initialize SDL");
-        let window = sdl
-            .create_raw_window("gb-r", WindowPosition::Centered, width, height, 0)
-            .expect("Failed to create SDL raw window");
-        let pixels = {
-            // TODO: Beryllium does not expose the SDL2 `GetDrawableSize` APIs, so choosing the correct
-            // surface texture size is not possible.
-            let surface_texture = SurfaceTexture::new(width, height, &window);
-            Pixels::new(width, height, surface_texture).unwrap()
+    pub fn new(emu: Arc<RwLock<GameBoy>>, width: u32, height: u32) -> Self {
+        VideoDriver { emu, width, height }
+    }
+
+    pub fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let sdl = Sdl::init(InitFlags::EVERYTHING)?;
+        let window = sdl.create_vk_window(
+            zstr!("gb-r"),
+            None,
+            (self.width as i32, self.height as i32),
+            WindowFlags::ALLOW_HIGHDPI,
+        )?;
+
+        let mut pixels = {
+            let surface_texture = SurfaceTexture::new(self.width, self.height, &*window);
+            Pixels::new(self.width, self.height, surface_texture)?
         };
 
-        VideoDriver {
-            sdl: sdl,
-            window: window,
-            pixels: pixels,
+        'game_loop: loop {
+            while let Some(event) = sdl.poll_event() {
+                match event {
+                    Event::Quit { .. } => break 'game_loop,
+                    Event::Keyboard { keycode: key, .. } if key == keycode::SDLK_ESCAPE => {
+                        break 'game_loop
+                    }
+                    Event::WindowResized { width, height, .. } => {
+                        pixels.resize_surface(width, height)
+                    }
+                    _ => (),
+                }
+            }
+
+            {
+                let gb = self.emu.read().unwrap();
+                VideoDriver::draw(&gb, pixels.get_frame());
+                pixels.render()?;
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(166));
         }
+
+        Ok(())
     }
 
-    pub fn draw(&mut self, game_boy: &GameBoy) {
-        self.pixels.render();
-    }
+    fn draw(emu: &RwLockReadGuard<GameBoy>, frame: &mut [u8]) {}
 }
