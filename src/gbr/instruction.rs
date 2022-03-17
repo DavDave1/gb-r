@@ -1,9 +1,7 @@
-use log::error;
-
-extern crate num;
-
 use byteorder::{ByteOrder, LittleEndian};
 use num::FromPrimitive;
+
+use super::GbError;
 
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]
@@ -91,7 +89,7 @@ impl Instruction {
         LittleEndian::read_u16(&self.data[0..2])
     }
 
-    pub fn length(&self) -> Result<u16, ()> {
+    pub fn length(&self) -> Result<u16, GbError> {
         match self.opcode() {
             Some(Opcode::Nop) => Ok(1),
             Some(Opcode::DecB) => Ok(1),
@@ -135,10 +133,7 @@ impl Instruction {
             Some(Opcode::LdhCA) => Ok(1),
             Some(Opcode::LdhAa8) => Ok(2),
             Some(Opcode::Cpd8) => Ok(2),
-            None => {
-                error!("Cannot retrieve length of unknown instruction");
-                Err(())
-            }
+            None => Err(GbError::Decode),
         }
     }
 }

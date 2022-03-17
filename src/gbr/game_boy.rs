@@ -1,6 +1,8 @@
 use crate::gbr::bus::Bus;
 use crate::gbr::cpu::CPU;
 
+use super::GbError;
+
 pub struct GameBoy {
     cpu: CPU,
     bus: Bus,
@@ -14,7 +16,7 @@ impl GameBoy {
         }
     }
 
-    pub fn step(&mut self) -> Result<(), ()> {
+    pub fn step(&mut self) -> Result<(), GbError> {
         self.cpu.step(&mut self.bus)
     }
 

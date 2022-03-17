@@ -18,7 +18,10 @@ impl Debugger {
         let mut emu = self.emu.write().unwrap();
         match emu.step() {
             Ok(()) => true,
-            Err(()) => false,
+            Err(e) => {
+                log::error!("step error: {}", e);
+                false
+            }
         }
     }
 
@@ -30,7 +33,8 @@ impl Debugger {
         for _ in 0..20 {
             let instruction = match self.emu.read().unwrap().bus().fetch_instruction(pc) {
                 Ok(instr) => instr,
-                Err(()) => {
+                Err(e) => {
+                    log::error!("dissassemble error: {}", e);
                     disassembly.push((pc, None));
                     continue;
                 }

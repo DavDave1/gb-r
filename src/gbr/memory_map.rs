@@ -1,4 +1,4 @@
-use log::error;
+use crate::gbr::GbError;
 
 pub const MEMORY_SIZE: usize = 0x10000;
 pub const BOOT_ROM_SIZE: usize = 0x100;
@@ -48,7 +48,7 @@ pub enum MappedAddress {
     InterruptEnableRegister,
 }
 
-pub fn map_address(addr: u16) -> Result<MappedAddress, ()> {
+pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
     match addr {
         ROM_BANK0_START..=ROM_BANK0_END => Ok(MappedAddress::RomBank0(addr - ROM_BANK0_START)),
         ROM_ACTIVE_BANK_START..=ROM_ACTIVE_BANK_END => {
@@ -64,17 +64,17 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, ()> {
         WORK_RAM_ACTIVE_BANK_START..=WORK_RAM_ACTIVE_BANK_END => Ok(
             MappedAddress::WorkRamActiveBank(addr - WORK_RAM_ACTIVE_BANK_START),
         ),
-        ECHO_RAM_START..=ECHO_RAM_END => {
-            error!("Attempted to access echo RAM {:#06X}", addr);
-            Err(())
-        }
+        ECHO_RAM_START..=ECHO_RAM_END => Err(GbError::IllegalOp(format!(
+            "access to echo RAM {:#06X}",
+            addr
+        ))),
         SPRITE_ATTRIBUTE_TABLE_START..=SPRITE_ATTRIBUTE_TABLE_END => Ok(
             MappedAddress::SpriteAttributeTable(addr - SPRITE_ATTRIBUTE_TABLE_START),
         ),
-        NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => {
-            error!("Attempted to access not usable RAM {:#06X}", addr);
-            Err(())
-        }
+        NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => Err(GbError::IllegalOp(format!(
+            "access to not usable RAM RAM {:#06X}",
+            addr
+        ))),
         IO_REGISTERS_START..=IO_REGISTERS_END => {
             Ok(MappedAddress::IORegisters(addr - IO_REGISTERS_START))
         }

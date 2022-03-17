@@ -1,9 +1,9 @@
-use log::error;
 use std::fmt;
 
 use crate::gbr::alu::ALU;
 use crate::gbr::bus::Bus;
 use crate::gbr::instruction::{CbOpcode, Opcode};
+use crate::gbr::GbError;
 
 pub struct CpuState {
     pub af: u16,
@@ -160,14 +160,14 @@ impl CPU {
         }
     }
 
-    fn push_stack(&mut self, bus: &mut Bus, value: u16) -> Result<(), ()> {
+    fn push_stack(&mut self, bus: &mut Bus, value: u16) -> Result<(), GbError> {
         bus.write_byte(self.reg_sp - 1, (value >> 8) as u8)?;
         bus.write_byte(self.reg_sp - 2, value as u8)?;
         self.reg_sp -= 2;
         Ok(())
     }
 
-    fn pop_stack(&mut self, bus: &mut Bus) -> Result<u16, ()> {
+    fn pop_stack(&mut self, bus: &mut Bus) -> Result<u16, GbError> {
         let value = bus.read_word(self.reg_sp)?;
         self.reg_sp += 2;
         Ok(value)
@@ -182,14 +182,13 @@ impl CPU {
         }
     }
 
-    pub fn step(&mut self, bus: &mut Bus) -> Result<(), ()> {
+    pub fn step(&mut self, bus: &mut Bus) -> Result<(), GbError> {
         let instr = bus.fetch_instruction(self.reg_pc)?;
         let opcode = match instr.opcode() {
             Some(op) => op,
             None => {
                 let byte = bus.read_byte(self.reg_pc)?;
-                error!("Unknown instruction {:#04X}", byte);
-                return Err(());
+                return Err(GbError::UnknownInstruction(byte));
             }
         };
 
@@ -256,8 +255,7 @@ impl CPU {
                 Some(CbOpcode::SlaB) => self.reg_b = ALU::sla(self, self.reg_b),
                 Some(CbOpcode::Bit7H) => ALU::test_bit(self, self.reg_h, 7),
                 None => {
-                    error!("Unknown cb instruction {:#04X}", instr.byte());
-                    return Err(());
+                    return Err(GbError::UnknownCbInstruction(instr.byte()));
                 }
             },
             Opcode::Calla16 => {

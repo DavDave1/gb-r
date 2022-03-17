@@ -1,4 +1,3 @@
-use log::error;
 use std::fs;
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -6,6 +5,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use crate::gbr::instruction::Instruction;
 use crate::gbr::io_registers::IORegisters;
 use crate::gbr::memory_map::*;
+use crate::gbr::GbError;
 
 pub struct Bus {
     boot_rom_lock: bool,
@@ -40,7 +40,7 @@ impl Bus {
         &self.io_registers
     }
 
-    pub fn fetch_instruction(&self, addr: u16) -> Result<Instruction, ()> {
+    pub fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError> {
         match map_address(addr)? {
             MappedAddress::RomBank0(addr) => {
                 if self.boot_rom_lock {
@@ -48,17 +48,17 @@ impl Bus {
                         &self.boot_rom[addr as usize..addr as usize + 3],
                     ))
                 } else {
-                    error!("Fetching instruction from cart not implemented");
-                    Err(())
+                    Err(GbError::Unimplemented(
+                        "fetching instruction from cart".into(),
+                    ))
                 }
             }
-            _ => {
-                error!("Fetching instruction ouside rom bank 0 not implemented");
-                Err(())
-            }
+            _ => Err(GbError::Unimplemented(
+                "fetching instruction outside form bank 0".into(),
+            )),
         }
     }
-    pub fn read_byte(&self, addr: u16) -> Result<u8, ()> {
+    pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
         match map_address(addr)? {
             MappedAddress::RomBank0(addr) => {
                 if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
@@ -67,140 +67,117 @@ impl Bus {
                     Ok(self.cart_rom[addr as usize])
                 }
             }
-            MappedAddress::RomActiveBank(addr) => {
-                error!("Reading from cart active bank not implemented");
-                Err(())
-            }
+            MappedAddress::RomActiveBank(addr) => Err(GbError::Unimplemented(
+                "reading from cart active bank".into(),
+            )),
             MappedAddress::VideoRam(addr) => {
                 if self.io_registers.lcd_control().display_enable() == false {
                     Ok(self.vram[addr as usize])
                 } else {
-                    error!("Cannot read vram whle lcd is active");
-                    Err(())
+                    Err(GbError::IllegalOp(
+                        "reading vram while lct is active".into(),
+                    ))
                 }
             }
             MappedAddress::ExternalRam(addr) => {
-                error!("Reading from external ram not implemented");
-                Err(())
+                Err(GbError::Unimplemented("reading from external ram".into()))
             }
-            MappedAddress::WorkRamBank0(addr) => {
-                error!("Reading from work ram 0 not implemented");
-                Err(())
-            }
-            MappedAddress::WorkRamActiveBank(addr) => {
-                error!("Reading from work ram active bank not implemented");
-                Err(())
-            }
-            MappedAddress::SpriteAttributeTable(addr) => {
-                error!("Reading sprite attribute table not implemented");
-                Err(())
-            }
+            MappedAddress::WorkRamBank0(addr) => Err(GbError::Unimplemented(
+                "reading from work ram bank 0".into(),
+            )),
+            MappedAddress::WorkRamActiveBank(addr) => Err(GbError::Unimplemented(
+                "reading from work ram active bank".into(),
+            )),
+            MappedAddress::SpriteAttributeTable(addr) => Err(GbError::Unimplemented(
+                "reading sprite attribute table".into(),
+            )),
             MappedAddress::IORegisters(addr) => self.io_registers.read(addr),
             MappedAddress::HighRam(addr) => Ok(self.hram[addr as usize]),
-            MappedAddress::InterruptEnableRegister => {
-                error!("Reading interrupt enable register not implemented");
-                Err(())
-            }
+            MappedAddress::InterruptEnableRegister => Err(GbError::Unimplemented(
+                "reading interrupr enable register".into(),
+            )),
         }
     }
 
-    pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), ()> {
+    pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match map_address(addr)? {
-            MappedAddress::RomBank0(addr) => {
-                error!("Cannot write to rom bank 0");
-                Err(())
-            }
+            MappedAddress::RomBank0(addr) => Err(GbError::IllegalOp("write to rom bank 0".into())),
             MappedAddress::RomActiveBank(addr) => {
-                error!("Cannot write to rom active bank");
-                Err(())
+                Err(GbError::IllegalOp("write to rom active bank".into()))
             }
             MappedAddress::VideoRam(addr) => {
                 if self.io_registers.lcd_control().display_enable() == false {
                     self.vram[addr as usize] = value;
                     Ok(())
                 } else {
-                    error!("Cannot write vram whle lcd is active");
-                    Err(())
+                    Err(GbError::IllegalOp(
+                        "write to vram while lcd is active".into(),
+                    ))
                 }
             }
             MappedAddress::ExternalRam(addr) => {
-                error!("Writing to external ram not implemented");
-                Err(())
+                Err(GbError::Unimplemented("writing to external ram".into()))
             }
             MappedAddress::WorkRamBank0(addr) => {
-                error!("Writing towork ram 0 not implemented");
-                Err(())
+                Err(GbError::Unimplemented("writing to work ram 0".into()))
             }
-            MappedAddress::WorkRamActiveBank(addr) => {
-                error!("Writing to work ram active bank not implemented");
-                Err(())
-            }
-            MappedAddress::SpriteAttributeTable(addr) => {
-                error!("Writing toattribute table not implemented");
-                Err(())
-            }
-            MappedAddress::IORegisters(addr) => {
-                self.io_registers.write(addr, value);
-                Ok(())
-            }
+            MappedAddress::WorkRamActiveBank(addr) => Err(GbError::Unimplemented(
+                "writing to work ram active bank".into(),
+            )),
+            MappedAddress::SpriteAttributeTable(addr) => Err(GbError::Unimplemented(
+                "writing to sprite attribute table".into(),
+            )),
+            MappedAddress::IORegisters(addr) => self.io_registers.write(addr, value),
             MappedAddress::HighRam(addr) => {
                 self.hram[addr as usize] = value;
                 Ok(())
             }
-            MappedAddress::InterruptEnableRegister => {
-                error!("Writing interrupt enable register not implemented");
-                Err(())
-            }
+            MappedAddress::InterruptEnableRegister => Err(GbError::Unimplemented(
+                "writing interrubt enable register".into(),
+            )),
         }
     }
 
-    pub fn read_word(&self, addr: u16) -> Result<u16, ()> {
+    pub fn read_word(&self, addr: u16) -> Result<u16, GbError> {
         match map_address(addr)? {
             MappedAddress::RomBank0(addr) => {
                 if self.boot_rom_lock {
                     Ok(LittleEndian::read_u16(&self.boot_rom[addr as usize..]))
                 } else {
-                    error!("Reading from cart bank 0 not implemented");
-                    Err(())
+                    Err(GbError::Unimplemented("reading from cart bank 0".into()))
                 }
             }
-            MappedAddress::RomActiveBank(addr) => {
-                error!("Reading from cart active bank not implemented");
-                Err(())
-            }
+            MappedAddress::RomActiveBank(addr) => Err(GbError::Unimplemented(
+                "reading from cart active bank".into(),
+            )),
             MappedAddress::VideoRam(addr) => {
                 if self.io_registers.lcd_control().display_enable() == false {
                     Ok(LittleEndian::read_u16(&self.vram[addr as usize..]))
                 } else {
-                    error!("Cannot read vram whle lcd is active");
-                    Err(())
+                    Err(GbError::IllegalOp(
+                        "read from vram while lcd is active".into(),
+                    ))
                 }
             }
             MappedAddress::ExternalRam(addr) => {
-                error!("Reading from external ram not implemented");
-                Err(())
+                Err(GbError::Unimplemented("reading from external ram".into()))
             }
             MappedAddress::WorkRamBank0(addr) => {
-                error!("Reading from work ram 0 not implemented");
-                Err(())
+                Err(GbError::Unimplemented("reading from work ram 0".into()))
             }
-            MappedAddress::WorkRamActiveBank(addr) => {
-                error!("Reading from work ram active bank not implemented");
-                Err(())
-            }
-            MappedAddress::SpriteAttributeTable(addr) => {
-                error!("Reading sprite attribute table not implemented");
-                Err(())
-            }
+            MappedAddress::WorkRamActiveBank(addr) => Err(GbError::Unimplemented(
+                "reading from work ram active bank".into(),
+            )),
+            MappedAddress::SpriteAttributeTable(addr) => Err(GbError::Unimplemented(
+                "reading sprite attribute table".into(),
+            )),
             MappedAddress::IORegisters(addr) => {
-                error!("Reading from IO registers not implemented");
-                Err(())
+                Err(GbError::Unimplemented("reading IO registers".into()))
             }
             MappedAddress::HighRam(addr) => Ok(LittleEndian::read_u16(&self.hram[addr as usize..])),
-            MappedAddress::InterruptEnableRegister => {
-                error!("Reading interrupt enable register not implemented");
-                Err(())
-            }
+            MappedAddress::InterruptEnableRegister => Err(GbError::Unimplemented(
+                "reading interrupt enable register".into(),
+            )),
         }
     }
 }

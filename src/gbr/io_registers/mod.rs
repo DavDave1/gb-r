@@ -1,9 +1,9 @@
 pub mod background_palette;
 pub mod lcd_control_register;
 
-use log::error;
-
 use crate::gbr::memory_map::*;
+
+use super::GbError;
 
 #[derive(Default, Clone, Copy)]
 pub struct IORegisters {
@@ -62,7 +62,7 @@ impl IORegisters {
         &self.reg_lcd_control
     }
 
-    pub fn write(&mut self, addr: u16, value: u8) -> Result<(), ()> {
+    pub fn write(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match addr {
             0x0000 => Ok(self.reg_port_p1 = value),
             0x0001 => Ok(self.reg_serial_data = value),
@@ -73,8 +73,10 @@ impl IORegisters {
             0x0025 => Ok(self.reg_sound_output_terminal_selection = value),
             0x0026 => {
                 if value & 0x7F != 0 {
-                    error!("Can only write to sound enable register (NR52) bit 1. Attempting to write {:#04X}", value);
-                    Err(())
+                    Err(GbError::IllegalOp(format!(
+                        "attempting to write {:#04X} to sound enable register (NR52)",
+                        value
+                    )))
                 } else {
                     Ok(self.reg_sound_enable = value)
                 }
@@ -82,29 +84,23 @@ impl IORegisters {
             0x0040 => Ok(self.reg_lcd_control = value.into()),
             0x0042 => Ok(self.reg_scroll_y = value),
             0x0047 => Ok(self.reg_bg_palette_data = value.into()),
-            _ => {
-                error!(
-                    "Attempting to write to unimplemented io register {:#06X}",
-                    addr + IO_REGISTERS_START
-                );
-                Err(())
-            }
+            _ => Err(GbError::Unimplemented(format!(
+                "write to io register {:#06X}",
+                addr + IO_REGISTERS_START
+            ))),
         }
     }
 
-    pub fn read(&self, addr: u16) -> Result<u8, ()> {
+    pub fn read(&self, addr: u16) -> Result<u8, GbError> {
         match addr {
             0x0000 => Ok(self.reg_port_p1),
             0x0001 => Ok(self.reg_serial_data),
             0x0002 => Ok(self.reg_serial_control),
             0x0044 => Ok(self.reg_y_coordinate),
-            _ => {
-                error!(
-                    "Attempting to read from unimplemented io register {:#06X}",
-                    addr + IO_REGISTERS_START
-                );
-                Err(())
-            }
+            _ => Err(GbError::Unimplemented(format!(
+                "read from io register {:#06X}",
+                addr + IO_REGISTERS_START
+            ))),
         }
     }
 }
