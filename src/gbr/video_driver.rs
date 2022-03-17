@@ -10,7 +10,10 @@ use pixels::{Pixels, SurfaceTexture};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use zstring::zstr;
 
-use crate::gbr::game_boy::GameBoy;
+use crate::gbr::{
+    game_boy::GameBoy,
+    ppu::{self, PPU},
+};
 
 pub struct VideoDriver {
     emu: Arc<RwLock<GameBoy>>,
@@ -33,7 +36,8 @@ impl VideoDriver {
         )?;
 
         let mut pixels = {
-            let surface_texture = SurfaceTexture::new(self.width, self.height, &*window);
+            let surface_texture =
+                SurfaceTexture::new(ppu::SCREEN_WIDTH, ppu::SCREEN_HEIGHT, &*window);
             Pixels::new(self.width, self.height, surface_texture)?
         };
 
@@ -44,9 +48,9 @@ impl VideoDriver {
                     Event::Keyboard { keycode: key, .. } if key == keycode::SDLK_ESCAPE => {
                         break 'game_loop
                     }
-                    Event::WindowResized { width, height, .. } => {
-                        pixels.resize_surface(width, height)
-                    }
+                    // Event::WindowResized { width, height, .. } => {
+                    //     pixels.resize_surface(width, height)
+                    // }
                     _ => (),
                 }
             }
@@ -63,5 +67,7 @@ impl VideoDriver {
         Ok(())
     }
 
-    fn draw(emu: &RwLockReadGuard<GameBoy>, frame: &mut [u8]) {}
+    fn draw(emu: &RwLockReadGuard<GameBoy>, frame: &mut [u8]) {
+        frame.copy_from_slice(emu.ppu().buffer());
+    }
 }

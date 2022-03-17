@@ -1,11 +1,9 @@
-use crate::gbr::bus::Bus;
-use crate::gbr::cpu::CPU;
-
-use super::GbError;
+use crate::gbr::{bus::Bus, cpu::CPU, ppu::PPU, GbError};
 
 pub struct GameBoy {
     cpu: CPU,
     bus: Bus,
+    ppu: PPU,
 }
 
 impl GameBoy {
@@ -13,11 +11,13 @@ impl GameBoy {
         GameBoy {
             cpu: CPU::new(),
             bus: Bus::new(boot_rom_filename, cart_rom_filename),
+            ppu: PPU::new(),
         }
     }
 
     pub fn step(&mut self) -> Result<(), GbError> {
-        self.cpu.step(&mut self.bus)
+        self.cpu.step(&mut self.bus)?;
+        self.ppu.render(&self.bus)
     }
 
     pub fn cpu(&self) -> &CPU {
@@ -26,5 +26,9 @@ impl GameBoy {
 
     pub fn bus(&self) -> &Bus {
         &self.bus
+    }
+
+    pub fn ppu(&self) -> &PPU {
+        &self.ppu
     }
 }
