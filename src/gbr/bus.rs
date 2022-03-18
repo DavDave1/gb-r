@@ -58,6 +58,7 @@ impl Bus {
             )),
         }
     }
+
     pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
         match map_address(addr)? {
             MappedAddress::RomBank0(addr) => {
@@ -71,13 +72,13 @@ impl Bus {
                 "reading from cart active bank".into(),
             )),
             MappedAddress::VideoRam(addr) => {
-                if self.io_registers.lcd_control().display_enable() == false {
-                    Ok(self.vram[addr as usize])
-                } else {
-                    Err(GbError::IllegalOp(
-                        "reading vram while lct is active".into(),
-                    ))
+                if self.io_registers.lcd_control().display_enable() {
+                    return Err(GbError::IllegalOp(
+                        "reading vram while lcd is active".into(),
+                    ));
                 }
+
+                Ok(self.vram[addr as usize])
             }
             MappedAddress::ExternalRam(addr) => {
                 Err(GbError::Unimplemented("reading from external ram".into()))

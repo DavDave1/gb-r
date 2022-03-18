@@ -57,8 +57,10 @@ impl VideoDriver {
 
             {
                 let gb = self.emu.read().unwrap();
-                VideoDriver::draw(&gb, pixels.get_frame());
-                pixels.render()?;
+                if gb.bus().io_registers().lcd_control().display_enable() {
+                    VideoDriver::draw(&gb, pixels.get_frame());
+                    pixels.render()?;
+                }
             }
 
             std::thread::sleep(std::time::Duration::from_millis(166));
