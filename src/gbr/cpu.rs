@@ -161,14 +161,14 @@ impl CPU {
     }
 
     fn push_stack(&mut self, bus: &mut Bus, value: u16) -> Result<(), GbError> {
-        bus.write_byte(self.reg_sp - 1, (value >> 8) as u8)?;
-        bus.write_byte(self.reg_sp - 2, value as u8)?;
+        bus.cpu_write_byte(self.reg_sp - 1, (value >> 8) as u8)?;
+        bus.cpu_write_byte(self.reg_sp - 2, value as u8)?;
         self.reg_sp -= 2;
         Ok(())
     }
 
     fn pop_stack(&mut self, bus: &mut Bus) -> Result<u16, GbError> {
-        let value = bus.read_word(self.reg_sp)?;
+        let value = bus.cpu_read_word(self.reg_sp)?;
         self.reg_sp += 2;
         Ok(value)
     }
@@ -187,7 +187,7 @@ impl CPU {
         let opcode = match instr.opcode() {
             Some(op) => op,
             None => {
-                let byte = bus.read_byte(self.reg_pc)?;
+                let byte = bus.cpu_read_byte(self.reg_pc)?;
                 return Err(GbError::UnknownInstruction(byte));
             }
         };
@@ -210,7 +210,7 @@ impl CPU {
                 self.reg_a = ALU::rlc(self, self.reg_a);
                 self.set_zero_flag(false); // investigate: why this special case?
             }
-            Opcode::LdADE => self.reg_a = bus.read_byte(self.read_de())?,
+            Opcode::LdADE => self.reg_a = bus.cpu_read_byte(self.read_de())?,
             Opcode::Jr => self.jump(instr.byte() as i8),
             Opcode::Jrnz => {
                 if self.get_zero_flag() == false {
@@ -224,14 +224,14 @@ impl CPU {
             }
             Opcode::LdHLd16 => self.write_hl(instr.word()),
             Opcode::LdHLincA => {
-                bus.write_byte(self.read_hl(), self.reg_a)?;
+                bus.cpu_write_byte(self.read_hl(), self.reg_a)?;
                 self.write_hl(self.read_hl() + 1);
             }
             Opcode::IncHL => self.write_hl(self.read_hl() + 1),
             Opcode::LdLd8 => self.reg_l = instr.byte(),
             Opcode::LdSPd16 => self.reg_sp = instr.word(),
             Opcode::LdHLdecA => {
-                bus.write_byte(self.read_hl(), self.reg_a)?;
+                bus.cpu_write_byte(self.read_hl(), self.reg_a)?;
                 self.write_hl(self.read_hl() - 1);
             }
             Opcode::DecA => self.reg_a = ALU::dec(self, self.reg_a),
@@ -239,7 +239,7 @@ impl CPU {
             Opcode::LdCA => self.reg_c = self.reg_a,
             Opcode::LdDA => self.reg_d = self.reg_a,
             Opcode::LdHA => self.reg_h = self.reg_a,
-            Opcode::LdHLA => bus.write_byte(self.read_hl(), self.reg_a)?,
+            Opcode::LdHLA => bus.cpu_write_byte(self.read_hl(), self.reg_a)?,
             Opcode::LdAE => self.reg_a = self.reg_e,
             Opcode::AddAB => self.reg_a = ALU::add(self, self.reg_a, self.reg_b),
             Opcode::SubAL => self.reg_a = ALU::sub(self, self.reg_a, self.reg_l),
@@ -263,10 +263,10 @@ impl CPU {
                 self.push_stack(bus, self.reg_pc + instr_len)?;
                 self.reg_pc = instr.word();
             }
-            Opcode::Ldha8A => bus.write_byte(0xFF00 + instr.byte() as u16, self.reg_a)?,
-            Opcode::Lda16A => self.reg_a = bus.read_byte(instr.word())?,
-            Opcode::LdhCA => bus.write_byte(0xFF00 + self.reg_c as u16, self.reg_a)?,
-            Opcode::LdhAa8 => self.reg_a = bus.read_byte(0xFF00 + instr.byte() as u16)?,
+            Opcode::Ldha8A => bus.cpu_write_byte(0xFF00 + instr.byte() as u16, self.reg_a)?,
+            Opcode::Lda16A => self.reg_a = bus.cpu_read_byte(instr.word())?,
+            Opcode::LdhCA => bus.cpu_write_byte(0xFF00 + self.reg_c as u16, self.reg_a)?,
+            Opcode::LdhAa8 => self.reg_a = bus.cpu_read_byte(0xFF00 + instr.byte() as u16)?,
             Opcode::Cpd8 => ALU::cp(self, self.reg_a, instr.byte()),
         };
         Ok(())

@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    mpsc::{channel, Sender},
+    Arc, RwLock,
+};
 
 use crate::gbr::cpu::CpuState;
 use crate::gbr::game_boy::GameBoy;
@@ -14,15 +17,30 @@ impl Debugger {
         Debugger { emu: game_boy }
     }
 
-    pub fn step(&self) -> bool {
+    pub fn step(&self) {
         let mut emu = self.emu.write().unwrap();
-        match emu.step() {
-            Ok(()) => true,
-            Err(e) => {
-                log::error!("step error: {}", e);
-                false
+        emu.step().map_err(|e| log::error!("emu error: {}", e)).ok();
+    }
+
+    pub fn run(&self) -> Sender<()> {
+        let (stop_sig, stop_slot) = channel::<()>();
+
+        let emu = self.emu.clone();
+        std::thread::spawn(move || {
+            let mut emu = emu.write().unwrap();
+            loop {
+                if let Err(e) = emu.step() {
+                    log::error!("emu error: {}", e);
+                    break;
+                }
+
+                if stop_slot.try_recv().is_ok() {
+                    break;
+                }
             }
-        }
+        });
+
+        stop_sig
     }
 
     pub fn disassemble(&self) -> Vec<(u16, Option<Instruction>)> {

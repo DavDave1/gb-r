@@ -1,51 +1,38 @@
 use std::sync::Arc;
 
-use cursive::Printer;
-
 use crate::debugger::debugger::Debugger;
 
-pub struct AsmView {
-    debugger: Arc<Debugger>,
-}
+const COL_MIN_WIDTH: f32 = 20.0;
+const COL_MAX_WIDTH: f32 = 200.0;
 
-impl AsmView {
-    pub fn new(debugger: Arc<Debugger>) -> Self {
-        AsmView { debugger }
-    }
-}
+pub fn show(debugger: Arc<Debugger>, ui: &mut egui::Ui) {
+    egui::Grid::new("Asm View")
+        .min_col_width(COL_MIN_WIDTH)
+        .max_col_width(COL_MAX_WIDTH)
+        .striped(true)
+        .show(ui, |ui| {
+            for (pc, instruction) in debugger.disassemble().iter() {
+                let label = match instruction {
+                    Some(instr) => {
+                        let opcode_str = match instr.opcode() {
+                            Some(opcode) => format!("{:?}", opcode).to_string(),
+                            None => "Unknonwn".to_string(),
+                        };
 
-impl cursive::view::View for AsmView {
-    fn draw(&self, printer: &Printer) {
-        for (i, (pc, instruction)) in self.debugger.disassemble().iter().enumerate() {
-            match instruction {
-                Some(instr) => {
-                    let mut data_str = String::new();
-                    let mut opcode_str = String::new();
+                        let instr_len = instr.length().unwrap_or(0);
 
-                    match instr.opcode() {
-                        Some(opcode) => {
-                            opcode_str = format!("{:?}", opcode);
-                            if instr.length().unwrap() == 1 {
-                                data_str = format!("{:#04X}", instr.byte());
-                            } else if instr.length().unwrap() == 2 {
-                                data_str = format!("{:#06X}", instr.word());
-                            }
-                        }
-                        None => opcode_str = "Unknonwn".to_string(),
+                        let data_str = if instr_len == 1 {
+                            format!("{:#04X}", instr.byte())
+                        } else {
+                            format!("{:#06X}", instr.word())
+                        };
+
+                        format!("{:#06X}: {} {}", pc, opcode_str, data_str)
                     }
-
-                    printer.print(
-                        (1, i),
-                        format!("{:#06X}: {} {}", pc, opcode_str, data_str).as_str(),
-                    );
-                }
-                None => {
-                    printer.print(
-                        (1, i),
-                        format!("{:#06X}: Unknown instruction ", pc).as_str(),
-                    );
-                }
+                    None => format!("{:#06X}: Unknonwn instruction", pc),
+                };
+                ui.label(label);
+                ui.end_row();
             }
-        }
-    }
+        });
 }

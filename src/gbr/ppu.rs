@@ -11,12 +11,12 @@ const RENDER_FRAME_WIDTH: u32 = 256;
 const RENDER_FRAME_HEIGHT: u32 = 256;
 const RENDER_FRAME_SIZE: usize = (RENDER_FRAME_WIDTH * RENDER_FRAME_HEIGHT * NUM_CHANNELS) as usize;
 
-const TILE_WIDTH: u32 = 8;
-const TILE_HEIGHT: u32 = 8;
+pub const TILE_WIDTH: u32 = 8;
+pub const TILE_HEIGHT: u32 = 8;
 const TILE_RENDER_SIZE: usize = (TILE_WIDTH * TILE_HEIGHT * NUM_CHANNELS) as usize;
 const TILE_DATA_SIZE: usize = 16;
 
-const TILE_BLOCK_SIZE: usize = 128;
+pub const TILE_BLOCK_SIZE: usize = 128;
 
 #[derive(Clone, Copy)]
 struct Tile {
@@ -32,8 +32,9 @@ impl Default for Tile {
 }
 
 impl Tile {
-    fn from_data(data: &[u8], palette: &[u8]) -> Self {
+    fn from_data(data: &[u8], palette: &[u32]) -> Self {
         let mut tile = Self::default();
+        tile
     }
 }
 
@@ -67,13 +68,12 @@ impl PPU {
             let mut tile_data = [0u8; TILE_DATA_SIZE];
 
             for chunk in tile_data.chunks_exact_mut(2) {
-                chunk.copy_from_slice(&bus.read_word(tile_addr)?.to_be_bytes());
+                chunk.copy_from_slice(&bus.ppu_read_word(tile_addr)?.to_be_bytes());
                 tile_addr += 2;
             }
 
-            self.update_tile(tile_index, &tile_data);
-
-            self.tile_list[tile_index] = Tile::from_data(&tile_data, &self.palette);
+            self.tile_list[tile_index] = Tile::from_data(&tile_data, &(*self.palette));
+            tile_index += 1;
         }
 
         Ok(())

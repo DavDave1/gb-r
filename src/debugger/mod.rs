@@ -5,3 +5,5 @@ mod asm_view;
 mod commands;
 mod cpu_view;
 mod io_registers_view;
+mod ui;
+mod video_driver;
