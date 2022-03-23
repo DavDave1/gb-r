@@ -5,6 +5,7 @@ use crate::gbr::bus::Bus;
 use crate::gbr::instruction::{CbOpcode, Opcode};
 use crate::gbr::GbError;
 
+#[derive(Default)]
 pub struct CpuState {
     pub af: u16,
     pub bc: u16,

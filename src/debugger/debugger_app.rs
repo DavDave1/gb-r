@@ -1,11 +1,11 @@
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 use std::thread;
 
 use rustyline::Editor;
 
 use crate::debugger::commands::*;
-use crate::debugger::debugger::Debugger;
+use crate::debugger::debugger::{Debugger, DebuggerCommand};
 use crate::debugger::video_driver::VideoDriver;
 use crate::gbr::game_boy::GameBoy;
 
@@ -36,24 +36,24 @@ impl DebuggerApp {
 
     fn run_prompt(debugger: Arc<Debugger>) {
         let mut rl = Editor::<()>::new();
-        let mut stop_sig: Option<Sender<()>> = None;
+        let mut cmd_sig: Option<Sender<DebuggerCommand>> = None;
         loop {
             match rl.readline("gb-r> ") {
                 Ok(line) => match line.parse() {
                     Ok(Command::RunStop) => {
                         log::info!("run/stop");
-                        match stop_sig {
-                            Some(stop) => {
-                                stop.send(()).unwrap();
-                                stop_sig = None;
+                        match cmd_sig.as_ref() {
+                            Some(sig) => {
+                                sig.send(DebuggerCommand::Stop).unwrap();
+                                cmd_sig = None;
                             }
-                            None => stop_sig = Some(debugger.run()),
+                            None => cmd_sig = Some(debugger.run()),
                         }
                     }
                     Ok(Command::Step) => debugger.step(),
                     Ok(Command::Quit) => {
-                        if let Some(stop) = stop_sig {
-                            stop.send(()).unwrap();
+                        if let Some(sig) = cmd_sig {
+                            sig.send(DebuggerCommand::Stop).unwrap();
                         }
                         break;
                     }

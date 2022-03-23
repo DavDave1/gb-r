@@ -2,6 +2,7 @@ use std::{borrow::Cow, str::FromStr};
 
 use nom::{branch::alt, IResult};
 
+#[derive(Debug, PartialEq)]
 pub enum Command {
     RunStop,
     Step,
@@ -52,4 +53,21 @@ fn quit(input: &str) -> IResult<&str, Command> {
         )),
         |i| Ok((i, Command::Quit)),
     )(input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Command;
+
+    #[test]
+    fn parse_run_stop_command() {
+        let c = "run".parse::<Command>();
+
+        assert!(c.is_ok());
+        assert_eq!(c.unwrap(), Command::RunStop);
+
+        let c = "ren".parse::<Command>();
+
+        assert!(c.is_err());
+    }
 }

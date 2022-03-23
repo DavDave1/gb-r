@@ -5,14 +5,23 @@ use pixels::PixelsContext;
 use std::sync::Arc;
 use winit::{event::WindowEvent, window::Window};
 
+use crate::gbr::cpu::CpuState;
+use crate::gbr::io_registers::IORegisters;
+
 use super::io_registers_view;
-use super::{asm_view, cpu_view, debugger::Debugger};
+use super::{
+    asm_view, cpu_view,
+    debugger::{AsmState, Debugger},
+};
 
 struct UiState {
     show_asm_view: bool,
     show_cpu_view: bool,
     show_registers_view: bool,
     debugger: Arc<Debugger>,
+    asm_state: AsmState,
+    io_registers_state: IORegisters,
+    cpu_state: CpuState,
 }
 
 impl UiState {
@@ -22,10 +31,27 @@ impl UiState {
             show_cpu_view: true,
             show_registers_view: true,
             debugger,
+            asm_state: AsmState::default(),
+            io_registers_state: IORegisters::default(),
+            cpu_state: CpuState::default(),
+        }
+    }
+
+    fn update_debug_data(&mut self) {
+        if let Some(state) = self.debugger.asm_state() {
+            self.asm_state = state;
+        }
+        if let Some(state) = self.debugger.io_registers_state() {
+            self.io_registers_state = state;
+        }
+        if let Some(state) = self.debugger.cpu_state() {
+            self.cpu_state = state;
         }
     }
 
     pub fn update(&mut self, ctx: &Context) {
+        self.update_debug_data();
+
         TopBottomPanel::top("menubar_container").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("Debug", |ui| {
@@ -47,25 +73,22 @@ impl UiState {
             });
         });
 
-        let debugger = self.debugger.clone();
         egui::Window::new("Asm")
             .open(&mut self.show_asm_view)
             .show(ctx, |ui| {
-                asm_view::show(debugger, ui);
+                asm_view::show(&self.asm_state, ui);
             });
 
-        let debugger = self.debugger.clone();
         egui::Window::new("CPU")
             .open(&mut self.show_cpu_view)
             .show(ctx, |ui| {
-                cpu_view::show(debugger, ui);
+                cpu_view::show(&self.cpu_state, ui);
             });
 
-        let debugger = self.debugger.clone();
         egui::Window::new("IO registers")
             .open(&mut self.show_registers_view)
             .show(ctx, |ui| {
-                io_registers_view::show(debugger, ui);
+                io_registers_view::show(&self.io_registers_state, ui);
             });
     }
 }

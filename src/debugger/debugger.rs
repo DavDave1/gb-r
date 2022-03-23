@@ -3,12 +3,17 @@ use std::sync::{
     Arc, RwLock,
 };
 
+use crate::gbr::cpu::CpuState;
 use crate::gbr::instruction::Instruction;
 use crate::gbr::io_registers::IORegisters;
 use crate::gbr::{bus::Bus, game_boy::GameBoy};
-use crate::gbr::{cpu::CpuState, io_registers};
 
-type AsmState = Vec<(u16, Option<Instruction>)>;
+pub type AsmState = Vec<(u16, Option<Instruction>)>;
+
+pub enum DebuggerCommand {
+    Stop,
+    PauseResume,
+}
 
 pub struct Debugger {
     pub emu: Arc<RwLock<GameBoy>>,
@@ -21,19 +26,33 @@ impl Debugger {
     pub fn new(game_boy: Arc<RwLock<GameBoy>>) -> Self {
         Debugger {
             emu: game_boy,
-            cpu_state: flume::unbounded(),
-            asm_state: flume::unbounded(),
-            io_registers_state: flume::unbounded(),
+            cpu_state: flume::bounded(1),
+            asm_state: flume::bounded(1),
+            io_registers_state: flume::bounded(1),
         }
     }
 
     pub fn step(&self) {
-        let mut emu = self.emu.write().unwrap();
-        emu.step().map_err(|e| log::error!("emu error: {}", e)).ok();
+        if let Ok(mut emu) = self.emu.try_write() {
+            emu.step().map_err(|e| log::error!("emu error: {}", e)).ok();
+
+            self.cpu_state.0.try_send(emu.cpu().state()).ok();
+            self.io_registers_state
+                .0
+                .try_send(*emu.bus().io_registers())
+                .ok();
+
+            self.asm_state
+                .0
+                .try_send(Debugger::disassemble(emu.cpu().read_pc(), emu.bus()))
+                .ok();
+        } else {
+            log::warn!("emu non accessible");
+        }
     }
 
-    pub fn run(&self) -> Sender<()> {
-        let (stop_sig, stop_slot) = channel::<()>();
+    pub fn run(&self) -> Sender<DebuggerCommand> {
+        let (cmd_sig, cmd_slot) = channel::<DebuggerCommand>();
 
         let emu = self.emu.clone();
 
@@ -43,14 +62,19 @@ impl Debugger {
 
         std::thread::spawn(move || {
             let mut emu = emu.write().unwrap();
+            let mut is_paused = false;
             loop {
-                if let Err(e) = emu.step() {
-                    log::error!("emu error: {}", e);
-                    break;
+                if !is_paused {
+                    if let Err(e) = emu.step() {
+                        log::error!("emu error: {}", e);
+                        break;
+                    }
                 }
 
-                if stop_slot.try_recv().is_ok() {
-                    break;
+                match cmd_slot.try_recv() {
+                    Ok(DebuggerCommand::Stop) => break,
+                    Ok(DebuggerCommand::PauseResume) => is_paused = !is_paused,
+                    _ => (),
                 }
 
                 cpu_state_sig.try_send(emu.cpu().state()).ok();
@@ -64,7 +88,7 @@ impl Debugger {
             }
         });
 
-        stop_sig
+        cmd_sig
     }
 
     pub fn asm_state(&self) -> Option<AsmState> {
