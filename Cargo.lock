@@ -944,6 +944,7 @@ dependencies = [
  "num",
  "pixels",
  "pretty_env_logger",
+ "rand",
  "rustyline",
  "thiserror",
  "winit",

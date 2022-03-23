@@ -46,7 +46,7 @@ impl VideoDriver {
         let scale_factor = window.scale_factor() as f32;
 
         let surface_texture = SurfaceTexture::new(ppu::SCREEN_WIDTH, ppu::SCREEN_HEIGHT, &window);
-        let mut pixels = Pixels::new(self.width, self.height, surface_texture)?;
+        let mut pixels = Pixels::new(ppu::SCREEN_WIDTH, ppu::SCREEN_HEIGHT, surface_texture)?;
         let mut ui = Ui::new(
             self.debugger.clone(),
             self.width,
@@ -63,7 +63,7 @@ impl VideoDriver {
         });
 
         log::debug!("Starting video loop");
-        let emu = self.debugger.emu.clone();
+        let render_slot = self.debugger.emu.read().unwrap().ppu().render_watch();
         event_loop.run(move |event, _, control_flow| {
             if input.update(&event) {
                 if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
@@ -87,8 +87,8 @@ impl VideoDriver {
                 Event::WindowEvent { event, .. } => ui.handle_event(&event),
                 Event::RedrawRequested(_) => {
                     {
-                        if let Ok(gb) = emu.try_read() {
-                            VideoDriver::draw(&gb, pixels.get_frame());
+                        if let Ok(frame) = render_slot.try_recv() {
+                            pixels.get_frame().copy_from_slice(&frame);
                         }
                     }
 
@@ -112,24 +112,5 @@ impl VideoDriver {
                 _ => (),
             }
         });
-    }
-
-    fn draw(emu: &RwLockReadGuard<GameBoy>, frame: &mut [u8]) {
-        // frame.copy_from_slice(emu.ppu().buffer());
-    }
-
-    fn draw_test(line_idx: usize, frame: &mut [u8]) {
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let _x = i % ppu::SCREEN_WIDTH as usize;
-            let y = i / ppu::SCREEN_WIDTH as usize;
-
-            let rgba = if y == line_idx {
-                [0x00, 0xFA, 0xFF, 0xFF]
-            } else {
-                [0x00, 0x00, 0x00, 0x00]
-            };
-
-            pixel.copy_from_slice(&rgba);
-        }
     }
 }

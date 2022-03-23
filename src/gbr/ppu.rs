@@ -1,3 +1,5 @@
+use rand::prelude::*;
+
 use crate::gbr::bus::Bus;
 
 use super::{memory_map, GbError};
@@ -17,6 +19,8 @@ const TILE_RENDER_SIZE: usize = (TILE_WIDTH * TILE_HEIGHT * NUM_CHANNELS) as usi
 const TILE_DATA_SIZE: usize = 16;
 
 pub const TILE_BLOCK_SIZE: usize = 128;
+
+pub type ScreenBuffer = Vec<u8>;
 
 #[derive(Clone, Copy)]
 struct Tile {
@@ -39,24 +43,33 @@ impl Tile {
 }
 
 pub struct PPU {
-    screen_buffer: Box<[u8; SCREEN_SIZE]>,
-    render_buffer: Box<[u8; RENDER_FRAME_SIZE]>,
+    screen_buffer: Vec<u8>,
+    render_buffer: Vec<u8>,
     tile_list: Box<[Tile; 3 * TILE_BLOCK_SIZE]>,
     palette: Box<[u32; 4]>,
+    render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
 }
 
 impl PPU {
     pub fn new() -> Self {
         Self {
-            screen_buffer: Box::new([0; SCREEN_SIZE]),
-            render_buffer: Box::new([0; RENDER_FRAME_SIZE]),
+            screen_buffer: vec![0; SCREEN_SIZE],
+            render_buffer: vec![0; RENDER_FRAME_SIZE],
             tile_list: Box::new([Tile::default(); 3 * TILE_BLOCK_SIZE]),
             palette: Box::new([0; 4]),
+            render_ch: flume::bounded(1),
         }
+    }
+
+    pub fn render_watch(&self) -> flume::Receiver<ScreenBuffer> {
+        self.render_ch.1.clone()
     }
 
     pub fn render(&mut self, bus: &Bus) -> Result<(), GbError> {
         self.update_tile_list(bus)?;
+        self.draw_test_frame();
+
+        self.render_ch.0.try_send(self.screen_buffer.clone()).ok();
         Ok(())
     }
 
@@ -79,7 +92,12 @@ impl PPU {
         Ok(())
     }
 
-    pub fn buffer(&self) -> &[u8] {
-        &(*self.screen_buffer)
+    fn draw_test_frame(&mut self) {
+        for pixel in self.screen_buffer.chunks_exact_mut(4) {
+            let r: u8 = rand::thread_rng().gen();
+            let g: u8 = rand::thread_rng().gen();
+            let b: u8 = rand::thread_rng().gen();
+            pixel.copy_from_slice(&[r, g, b, 0xFF]);
+        }
     }
 }

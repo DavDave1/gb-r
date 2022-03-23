@@ -12,11 +12,10 @@ pub type AsmState = Vec<(u16, Option<Instruction>)>;
 
 pub enum DebuggerCommand {
     Stop,
-    PauseResume,
 }
 
 pub struct Debugger {
-    pub emu: Arc<RwLock<GameBoy>>,
+    emu: Arc<RwLock<GameBoy>>,
     cpu_state: (flume::Sender<CpuState>, flume::Receiver<CpuState>),
     asm_state: (flume::Sender<AsmState>, flume::Receiver<AsmState>),
     io_registers_state: (flume::Sender<IORegisters>, flume::Receiver<IORegisters>),
@@ -62,18 +61,14 @@ impl Debugger {
 
         std::thread::spawn(move || {
             let mut emu = emu.write().unwrap();
-            let mut is_paused = false;
             loop {
-                if !is_paused {
-                    if let Err(e) = emu.step() {
-                        log::error!("emu error: {}", e);
-                        break;
-                    }
+                if let Err(e) = emu.step() {
+                    log::error!("emu error: {}", e);
+                    break;
                 }
 
                 match cmd_slot.try_recv() {
                     Ok(DebuggerCommand::Stop) => break,
-                    Ok(DebuggerCommand::PauseResume) => is_paused = !is_paused,
                     _ => (),
                 }
 
