@@ -7,8 +7,10 @@ use winit::{event::WindowEvent, window::Window};
 
 use crate::gbr::cpu::CpuState;
 use crate::gbr::io_registers::IORegisters;
+use crate::gbr::ppu::TileList;
 
 use super::io_registers_view;
+use super::tiles_view::TilesView;
 use super::{
     asm_view, cpu_view,
     debugger::{AsmState, Debugger},
@@ -18,10 +20,13 @@ struct UiState {
     show_asm_view: bool,
     show_cpu_view: bool,
     show_registers_view: bool,
+    show_tiles: bool,
     debugger: Arc<Debugger>,
     asm_state: AsmState,
     io_registers_state: IORegisters,
     cpu_state: CpuState,
+    tiles_state: TileList,
+    tiles_view: TilesView,
 }
 
 impl UiState {
@@ -30,10 +35,13 @@ impl UiState {
             show_asm_view: true,
             show_cpu_view: true,
             show_registers_view: true,
+            show_tiles: true,
             debugger,
             asm_state: AsmState::default(),
             io_registers_state: IORegisters::default(),
             cpu_state: CpuState::default(),
+            tiles_state: TileList::default(),
+            tiles_view: TilesView::default(),
         }
     }
 
@@ -46,6 +54,9 @@ impl UiState {
         }
         if let Some(state) = self.debugger.cpu_state() {
             self.cpu_state = state;
+        }
+        if let Some(state) = self.debugger.tiles_state() {
+            self.tiles_state = state;
         }
     }
 
@@ -69,6 +80,11 @@ impl UiState {
                         self.show_registers_view = true;
                         ui.close_menu();
                     }
+
+                    if ui.button("Tiles view...").clicked() {
+                        self.show_tiles = true;
+                        ui.close_menu();
+                    }
                 });
             });
         });
@@ -89,6 +105,12 @@ impl UiState {
             .open(&mut self.show_registers_view)
             .show(ctx, |ui| {
                 io_registers_view::show(&self.io_registers_state, ui);
+            });
+
+        egui::Window::new("Tiles")
+            .open(&mut self.show_tiles)
+            .show(ctx, |ui| {
+                self.tiles_view.show(&self.tiles_state, ui);
             });
     }
 }

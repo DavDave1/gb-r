@@ -21,10 +21,11 @@ const TILE_DATA_SIZE: usize = 16;
 pub const TILE_BLOCK_SIZE: usize = 128;
 
 pub type ScreenBuffer = Vec<u8>;
+pub type TileList = Vec<Tile>;
 
 #[derive(Clone, Copy)]
-struct Tile {
-    data: [u8; TILE_RENDER_SIZE],
+pub struct Tile {
+    pub data: [u8; TILE_RENDER_SIZE],
 }
 
 impl Default for Tile {
@@ -38,6 +39,14 @@ impl Default for Tile {
 impl Tile {
     fn from_data(data: &[u8], palette: &[u32]) -> Self {
         let mut tile = Self::default();
+
+        let r: u8 = rand::thread_rng().gen();
+        let g: u8 = rand::thread_rng().gen();
+        let b: u8 = rand::thread_rng().gen();
+        for pixel in tile.data.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[r, g, b, 0xFF]);
+        }
+
         tile
     }
 }
@@ -45,7 +54,7 @@ impl Tile {
 pub struct PPU {
     screen_buffer: Vec<u8>,
     render_buffer: Vec<u8>,
-    tile_list: Box<[Tile; 3 * TILE_BLOCK_SIZE]>,
+    tile_list: Vec<Tile>,
     palette: Box<[u32; 4]>,
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
 }
@@ -55,10 +64,14 @@ impl PPU {
         Self {
             screen_buffer: vec![0; SCREEN_SIZE],
             render_buffer: vec![0; RENDER_FRAME_SIZE],
-            tile_list: Box::new([Tile::default(); 3 * TILE_BLOCK_SIZE]),
+            tile_list: vec![Tile::default(); 3 * TILE_BLOCK_SIZE],
             palette: Box::new([0; 4]),
             render_ch: flume::bounded(1),
         }
+    }
+
+    pub fn tile_list(&self) -> &[Tile] {
+        &self.tile_list
     }
 
     pub fn render_watch(&self) -> flume::Receiver<ScreenBuffer> {
@@ -73,7 +86,7 @@ impl PPU {
         Ok(())
     }
 
-    pub fn update_tile_list(&mut self, bus: &Bus) -> Result<(), GbError> {
+    fn update_tile_list(&mut self, bus: &Bus) -> Result<(), GbError> {
         let mut tile_addr = memory_map::TILE_DATA_START;
 
         let mut tile_index = 0usize;
