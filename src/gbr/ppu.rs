@@ -40,11 +40,23 @@ impl Tile {
     fn from_data(data: &[u8], palette: &[u32]) -> Self {
         let mut tile = Self::default();
 
-        let r: u8 = rand::thread_rng().gen();
-        let g: u8 = rand::thread_rng().gen();
-        let b: u8 = rand::thread_rng().gen();
-        for pixel in tile.data.chunks_exact_mut(4) {
-            pixel.copy_from_slice(&[r, g, b, 0xFF]);
+        // Tile data is represented as 2 bytes per line
+        for (x, line) in data.chunks_exact(2).enumerate() {
+            for y in 0..8 {
+                let mask = 0x01 << y;
+
+                let msb = (line[0] & mask) as u16;
+                let lsb = (line[1] & mask) as u16;
+                let mut color_id = (msb << 1u16) + lsb;
+                color_id = color_id >> y;
+
+                assert!(color_id <= 3);
+
+                let tile_data_index = (x + y * TILE_WIDTH as usize) * 4;
+
+                tile.data[tile_data_index..tile_data_index + 4]
+                    .copy_from_slice(&palette[color_id as usize].to_le_bytes());
+            }
         }
 
         tile
@@ -80,7 +92,6 @@ impl PPU {
 
     pub fn render(&mut self, bus: &Bus) -> Result<(), GbError> {
         self.update_tile_list(bus)?;
-        self.draw_test_frame();
 
         self.render_ch.0.try_send(self.screen_buffer.clone()).ok();
         Ok(())

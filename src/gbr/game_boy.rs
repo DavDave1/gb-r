@@ -16,8 +16,10 @@ impl GameBoy {
     }
 
     pub fn step(&mut self) -> Result<(), GbError> {
-        self.cpu.step(&mut self.bus)?;
-        self.ppu.render(&self.bus)
+        if self.bus().io_registers().lcd_control().display_enable() {
+            self.ppu.render(&self.bus)?;
+        }
+        self.cpu.step(&mut self.bus)
     }
 
     pub fn cpu(&self) -> &CPU {
