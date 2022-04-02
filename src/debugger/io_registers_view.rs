@@ -44,4 +44,6 @@ pub fn show(io_regs: &IORegisters, ui: &mut egui::Ui) {
         "LCD control: {:#010b}",
         io_regs.lcd_control().raw()
     ));
+
+    ui.label(format!("LCD status: {:#010b}", io_regs.lcd_status().raw()));
 }
