@@ -2,6 +2,7 @@ use egui::{ClippedMesh, Context, TexturesDelta, TopBottomPanel};
 use egui_wgpu_backend::{BackendError, RenderPass, ScreenDescriptor};
 use pixels::wgpu;
 use pixels::PixelsContext;
+use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use winit::{event::WindowEvent, window::Window};
 
@@ -9,6 +10,8 @@ use crate::gbr::cpu::CpuState;
 use crate::gbr::io_registers::IORegisters;
 use crate::gbr::ppu::TileList;
 
+use super::debugger::DebuggerCommand;
+use super::debugger::EmuState;
 use super::io_registers_view;
 use super::tiles_view::TilesView;
 use super::{
@@ -22,33 +25,35 @@ struct UiState {
     show_registers_view: bool,
     show_tiles: bool,
     debugger: Arc<Debugger>,
+    debugger_ch: Option<Sender<DebuggerCommand>>,
     asm_state: AsmState,
     io_registers_state: IORegisters,
     cpu_state: CpuState,
     tiles_state: TileList,
     tiles_view: TilesView,
+    emu_state: EmuState,
 }
 
 impl UiState {
     fn new(debugger: Arc<Debugger>) -> Self {
+        let asm_state = debugger.disassemble();
         Self {
             show_asm_view: true,
             show_cpu_view: true,
             show_registers_view: true,
             show_tiles: true,
             debugger,
-            asm_state: AsmState::default(),
+            debugger_ch: None,
+            asm_state,
             io_registers_state: IORegisters::default(),
             cpu_state: CpuState::default(),
             tiles_state: TileList::default(),
             tiles_view: TilesView::default(),
+            emu_state: EmuState::Reset,
         }
     }
 
     fn update_debug_data(&mut self) {
-        if let Some(state) = self.debugger.asm_state() {
-            self.asm_state = state;
-        }
         if let Some(state) = self.debugger.io_registers_state() {
             self.io_registers_state = state;
         }
@@ -57,6 +62,10 @@ impl UiState {
         }
         if let Some(state) = self.debugger.tiles_state() {
             self.tiles_state = state;
+        }
+
+        if let Some(state) = self.debugger.emu_state() {
+            self.emu_state = state;
         }
     }
 
@@ -89,22 +98,36 @@ impl UiState {
             });
         });
 
-        egui::Window::new("Asm")
-            .open(&mut self.show_asm_view)
+        egui::TopBottomPanel::top("toolbar")
+            .max_height(60.0)
             .show(ctx, |ui| {
-                asm_view::show(&self.asm_state, ui);
+                ui.horizontal_top(|ui| {
+                    if ui.button("Run").clicked() {
+                        if let Some(ch) = self.debugger_ch.as_ref() {
+                            ch.send(DebuggerCommand::Stop).unwrap();
+                            self.debugger_ch = None;
+                        } else {
+                            self.debugger_ch = Some(self.debugger.run());
+                        }
+                    }
+
+                    if ui.button("Step").clicked() {
+                        self.debugger.step();
+                    }
+                });
             });
 
-        egui::Window::new("CPU")
-            .open(&mut self.show_cpu_view)
+        egui::SidePanel::new(egui::panel::Side::Left, "ASM")
+            .default_width(400.0)
             .show(ctx, |ui| {
-                cpu_view::show(&self.cpu_state, ui);
-            });
-
-        egui::Window::new("IO registers")
-            .open(&mut self.show_registers_view)
-            .show(ctx, |ui| {
-                io_registers_view::show(&self.io_registers_state, ui);
+                ui.horizontal_top(|ui| {
+                    asm_view::show(&self.asm_state, &self.cpu_state, ui);
+                    ui.vertical(|ui| {
+                        cpu_view::show(&self.cpu_state, ui);
+                        ui.separator();
+                        io_registers_view::show(&self.io_registers_state, ui);
+                    });
+                });
             });
 
         egui::Window::new("Tiles")

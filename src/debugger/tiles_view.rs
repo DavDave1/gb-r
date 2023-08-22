@@ -20,15 +20,19 @@ fn create_image(tiles: &TileList) -> ColorImage {
 
         let mut tile_region = img.sub_image(x, y, TILE_WIDTH, TILE_HEIGHT);
 
-        for (sub_i, pixel) in tile.data.chunks_exact(4).enumerate() {
-            let sub_x = (sub_i as u32) % TILE_WIDTH;
-            let sub_y = (sub_i as u32) / TILE_WIDTH;
-
-            tile_region.put_pixel(
-                sub_x,
-                sub_y,
-                image::Rgba([pixel[0], pixel[1], pixel[2], pixel[3]]),
-            );
+        for r in 0..TILE_WIDTH as usize {
+            for c in 0..TILE_HEIGHT as usize {
+                tile_region.put_pixel(
+                    r as u32,
+                    c as u32,
+                    image::Rgba([
+                        tile.pixels[r][c].r,
+                        tile.pixels[r][c].g,
+                        tile.pixels[r][c].b,
+                        tile.pixels[r][c].a,
+                    ]),
+                );
+            }
         }
     }
 

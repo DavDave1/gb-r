@@ -1,29 +1,27 @@
 use std::fs;
+use std::sync::Arc;
 
 use byteorder::{ByteOrder, LittleEndian};
 
-use crate::gbr::instruction::Instruction;
-use crate::gbr::io_registers::IORegisters;
-use crate::gbr::memory_map::*;
-use crate::gbr::GbError;
-
-#[derive(PartialEq)]
-pub enum ComponentType {
-    CPU,
-    PPU,
-}
+use crate::gbr::{
+    instruction::Instruction, io_registers::IORegisters, memory_map::*, ppu::PPU, GbError,
+};
 
 pub struct Bus {
     boot_rom_lock: bool,
     boot_rom: Box<[u8]>,
     cart_rom: Box<[u8]>,
-    vram: Box<[u8]>,
     hram: Box<[u8]>,
     io_registers: IORegisters,
+    ppu: Arc<PPU>,
 }
 
 impl Bus {
-    pub fn new(boot_rom_filename: &std::path::Path, cart_rom_filename: &std::path::Path) -> Self {
+    pub fn new(
+        boot_rom_filename: &std::path::Path,
+        cart_rom_filename: &std::path::Path,
+        ppu: Arc<PPU>,
+    ) -> Self {
         let boot_rom = fs::read(boot_rom_filename).expect("Failed to read boot rom");
 
         if boot_rom.len() != BOOT_ROM_SIZE {
@@ -36,9 +34,9 @@ impl Bus {
             boot_rom_lock: true,
             boot_rom: boot_rom.into_boxed_slice(),
             cart_rom: cart_rom.into_boxed_slice(),
-            vram: vec![0; VIDEO_RAM_SIZE].into_boxed_slice(),
             hram: vec![0; HIGH_RAM_SIZE].into_boxed_slice(),
             io_registers: IORegisters::default(),
+            ppu,
         }
     }
 
@@ -50,9 +48,7 @@ impl Bus {
         match map_address(addr)? {
             MappedAddress::RomBank0(addr) => {
                 if self.boot_rom_lock {
-                    Ok(Instruction::new(
-                        &self.boot_rom[addr as usize..addr as usize + 3],
-                    ))
+                    Instruction::decode(&self.boot_rom[addr as usize..addr as usize + 3])
                 } else {
                     Err(GbError::Unimplemented(
                         "fetching instruction from cart".into(),
@@ -65,7 +61,7 @@ impl Bus {
         }
     }
 
-    pub fn read_byte(&self, addr: u16, comp: ComponentType) -> Result<u8, GbError> {
+    pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
         match map_address(addr)? {
             MappedAddress::RomBank0(addr) => {
                 if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
@@ -77,15 +73,7 @@ impl Bus {
             MappedAddress::RomActiveBank(addr) => Err(GbError::Unimplemented(
                 "reading from cart active bank".into(),
             )),
-            MappedAddress::VideoRam(addr) => {
-                if comp == ComponentType::CPU && self.io_registers.lcd_control().display_enable() {
-                    return Err(GbError::IllegalOp(
-                        "reading vram while lcd is active".into(),
-                    ));
-                }
-
-                Ok(self.vram[addr as usize])
-            }
+            MappedAddress::VideoRam(addr) => self.ppu.read_byte(addr),
             MappedAddress::ExternalRam(addr) => {
                 Err(GbError::Unimplemented("reading from external ram".into()))
             }
@@ -106,22 +94,13 @@ impl Bus {
         }
     }
 
-    pub fn write_byte(&mut self, addr: u16, value: u8, comp: ComponentType) -> Result<(), GbError> {
+    pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match map_address(addr)? {
             MappedAddress::RomBank0(addr) => Err(GbError::IllegalOp("write to rom bank 0".into())),
             MappedAddress::RomActiveBank(addr) => {
                 Err(GbError::IllegalOp("write to rom active bank".into()))
             }
-            MappedAddress::VideoRam(addr) => {
-                if comp == ComponentType::CPU && self.io_registers.lcd_control().display_enable() {
-                    return Err(GbError::IllegalOp(
-                        "write to vram while lcd is active".into(),
-                    ));
-                }
-
-                self.vram[addr as usize] = value;
-                Ok(())
-            }
+            MappedAddress::VideoRam(addr) => self.ppu.write_byte(addr, value),
             MappedAddress::ExternalRam(addr) => {
                 Err(GbError::Unimplemented("writing to external ram".into()))
             }
@@ -145,7 +124,7 @@ impl Bus {
         }
     }
 
-    pub fn read_word(&self, addr: u16, comp: ComponentType) -> Result<u16, GbError> {
+    pub fn read_word(&self, addr: u16) -> Result<u16, GbError> {
         match map_address(addr)? {
             MappedAddress::RomBank0(addr) => {
                 if self.boot_rom_lock {
@@ -157,14 +136,7 @@ impl Bus {
             MappedAddress::RomActiveBank(addr) => Err(GbError::Unimplemented(
                 "reading from cart active bank".into(),
             )),
-            MappedAddress::VideoRam(addr) => {
-                if comp == ComponentType::CPU && self.io_registers.lcd_control().display_enable() {
-                    return Err(GbError::IllegalOp(
-                        "read from vram while lcd is active".into(),
-                    ));
-                }
-                Ok(LittleEndian::read_u16(&self.vram[addr as usize..]))
-            }
+            MappedAddress::VideoRam(addr) => self.ppu.read_word(addr),
             MappedAddress::ExternalRam(addr) => {
                 Err(GbError::Unimplemented("reading from external ram".into()))
             }
@@ -185,29 +157,5 @@ impl Bus {
                 "reading interrupt enable register".into(),
             )),
         }
-    }
-
-    pub fn cpu_read_byte(&self, addr: u16) -> Result<u8, GbError> {
-        self.read_byte(addr, ComponentType::CPU)
-    }
-
-    pub fn cpu_write_byte(&mut self, addr: u16, val: u8) -> Result<(), GbError> {
-        self.write_byte(addr, val, ComponentType::CPU)
-    }
-
-    pub fn cpu_read_word(&self, addr: u16) -> Result<u16, GbError> {
-        self.read_word(addr, ComponentType::CPU)
-    }
-
-    pub fn ppu_read_byte(&self, addr: u16) -> Result<u8, GbError> {
-        self.read_byte(addr, ComponentType::PPU)
-    }
-
-    pub fn ppu_write_byte(&mut self, addr: u16, val: u8) -> Result<(), GbError> {
-        self.write_byte(addr, val, ComponentType::PPU)
-    }
-
-    pub fn ppu_read_word(&self, addr: u16) -> Result<u16, GbError> {
-        self.read_word(addr, ComponentType::PPU)
     }
 }

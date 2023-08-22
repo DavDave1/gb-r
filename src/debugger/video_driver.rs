@@ -1,6 +1,6 @@
 use log::error;
 use pixels::{Pixels, SurfaceTexture};
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::Arc;
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -9,11 +9,8 @@ use winit::{
 };
 use winit_input_helper::WinitInputHelper;
 
-use crate::gbr::{game_boy::GameBoy, ppu};
-
-use crate::debugger::ui::Ui;
-
-use super::debugger::Debugger;
+use crate::debugger::{debugger::Debugger, ui::Ui};
+use crate::gbr::ppu;
 
 pub struct VideoDriver {
     debugger: Arc<Debugger>,

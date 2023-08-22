@@ -1,9 +1,61 @@
-use crate::gbr::cpu::CPU;
+use crate::gbr::{cpu::CPU, instruction::CompareType};
+
+use super::instruction::ArithmeticType;
 
 #[derive(Default)]
 pub struct ALU;
 
 impl ALU {
+    pub fn exec(cpu: &mut CPU, op: &ArithmeticType) {
+        match op {
+            ArithmeticType::Add(dst, src) => {
+                let res = ALU::add(cpu, cpu.read_single_reg(dst), cpu.read_single_reg(src));
+                cpu.write_single_reg(dst, res);
+            }
+            ArithmeticType::Sub(dst, src) => {
+                let res = ALU::sub(cpu, cpu.read_single_reg(dst), cpu.read_single_reg(src));
+                cpu.write_single_reg(dst, res);
+            }
+            ArithmeticType::Inc8(dst) => {
+                let res = ALU::inc(cpu, cpu.read_single_reg(dst));
+                cpu.write_single_reg(dst, res);
+            }
+            ArithmeticType::Inc16(dst) => cpu.write_double_reg(dst, cpu.read_double_reg(dst) + 1),
+            ArithmeticType::Dec(dst) => {
+                let res = ALU::dec(cpu, cpu.read_single_reg(dst));
+                cpu.write_single_reg(dst, res);
+            }
+            ArithmeticType::Cmp(dst, com_type) => {
+                let cmp_val = match com_type {
+                    CompareType::Imm(v) => *v,
+                    CompareType::Reg(src) => cpu.read_single_reg(src),
+                };
+
+                ALU::cp(cpu, cpu.read_single_reg(dst), cmp_val);
+            }
+            ArithmeticType::Rlc(reg) => {
+                let res = ALU::rlc(cpu, cpu.read_single_reg(reg));
+                cpu.write_single_reg(reg, res);
+            }
+            ArithmeticType::Rl(reg) => {
+                let res = ALU::rlc(cpu, cpu.read_single_reg(reg));
+                cpu.write_single_reg(reg, res);
+                cpu.set_zero_flag(false); // investigate: why this special case?
+            }
+            ArithmeticType::Sla(reg) => {
+                let res = ALU::sla(cpu, cpu.read_single_reg(reg));
+                cpu.write_single_reg(reg, res);
+            }
+            ArithmeticType::TestBit(reg, bit) => {
+                ALU::test_bit(cpu, cpu.read_single_reg(reg), *bit);
+            }
+            ArithmeticType::Xor(dst, src) => {
+                let res = ALU::xor(cpu, cpu.read_single_reg(dst), cpu.read_single_reg(src));
+                cpu.write_single_reg(dst, res);
+            }
+        }
+    }
+
     pub fn dec(cpu: &mut CPU, value: u8) -> u8 {
         let result = value.wrapping_sub(1);
 

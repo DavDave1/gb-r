@@ -22,4 +22,6 @@ pub enum GbError {
     Unimplemented(String),
     #[error("Illegal operation: {0}")]
     IllegalOp(String),
+    #[error("Address {0:#06X} out of bounds")]
+    AddrOutOfBounds(u16),
 }

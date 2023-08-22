@@ -1,6 +1,7 @@
 use crate::gbr::cpu::CpuState;
 
 pub fn show(state: &CpuState, ui: &mut egui::Ui) {
+    ui.heading("CPU");
     ui.label("Registers:");
 
     let label = format!(

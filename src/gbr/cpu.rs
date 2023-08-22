@@ -2,8 +2,12 @@ use std::fmt;
 
 use crate::gbr::alu::ALU;
 use crate::gbr::bus::Bus;
-use crate::gbr::instruction::{CbOpcode, Opcode};
 use crate::gbr::GbError;
+
+use super::instruction::{
+    CallMode, DestType, DoubleRegType, InstructionType, JumpCondition, PostStore, SingleRegType,
+    SourceType,
+};
 
 #[derive(Default)]
 pub struct CpuState {
@@ -105,6 +109,50 @@ impl CPU {
         self.reg_l = value as u8;
     }
 
+    pub fn read_single_reg(&self, reg: &SingleRegType) -> u8 {
+        match reg {
+            SingleRegType::A => self.reg_a,
+            SingleRegType::B => self.reg_b,
+            SingleRegType::C => self.reg_c,
+            SingleRegType::D => self.reg_d,
+            SingleRegType::E => self.reg_e,
+            SingleRegType::F => self.reg_f,
+            SingleRegType::H => self.reg_h,
+            SingleRegType::L => self.reg_l,
+        }
+    }
+
+    pub fn write_single_reg(&mut self, reg: &SingleRegType, value: u8) {
+        match reg {
+            SingleRegType::A => self.reg_a = value,
+            SingleRegType::B => self.reg_b = value,
+            SingleRegType::C => self.reg_c = value,
+            SingleRegType::D => self.reg_d = value,
+            SingleRegType::E => self.reg_e = value,
+            SingleRegType::F => self.reg_f = value,
+            SingleRegType::H => self.reg_h = value,
+            SingleRegType::L => self.reg_l = value,
+        }
+    }
+
+    pub fn read_double_reg(&self, reg: &DoubleRegType) -> u16 {
+        match reg {
+            DoubleRegType::BC => self.read_bc(),
+            DoubleRegType::DE => self.read_de(),
+            DoubleRegType::HL => self.read_hl(),
+            DoubleRegType::SP => self.reg_sp,
+        }
+    }
+
+    pub fn write_double_reg(&mut self, reg: &DoubleRegType, value: u16) {
+        match reg {
+            DoubleRegType::BC => self.write_bc(value),
+            DoubleRegType::DE => self.write_de(value),
+            DoubleRegType::HL => self.write_hl(value),
+            DoubleRegType::SP => self.reg_sp = value,
+        }
+    }
+
     pub fn read_pc(&self) -> u16 {
         self.reg_pc
     }
@@ -162,115 +210,126 @@ impl CPU {
     }
 
     fn push_stack(&mut self, bus: &mut Bus, value: u16) -> Result<(), GbError> {
-        bus.cpu_write_byte(self.reg_sp - 1, (value >> 8) as u8)?;
-        bus.cpu_write_byte(self.reg_sp - 2, value as u8)?;
+        bus.write_byte(self.reg_sp - 1, (value >> 8) as u8)?;
+        bus.write_byte(self.reg_sp - 2, value as u8)?;
         self.reg_sp -= 2;
         Ok(())
     }
 
     fn pop_stack(&mut self, bus: &mut Bus) -> Result<u16, GbError> {
-        let value = bus.cpu_read_word(self.reg_sp)?;
+        let value = bus.read_word(self.reg_sp)?;
         self.reg_sp += 2;
         Ok(value)
     }
 
-    fn jump(&mut self, offset: i8) {
-        // TODO: find a better way to to this
-        if offset < 0 {
-            self.reg_pc -= offset.abs() as u16;
-        } else {
-            self.reg_pc += offset as u16;
+    fn test_condition(&self, condition: &JumpCondition) -> bool {
+        match condition {
+            JumpCondition::Always => true,
+            JumpCondition::Carry => self.get_carry_flag() == true,
+            JumpCondition::NotCarry => self.get_carry_flag() == false,
+            JumpCondition::Zero => self.get_zero_flag() == true,
+            JumpCondition::NotZero => self.get_zero_flag() == false,
         }
     }
 
-    pub fn step(&mut self, bus: &mut Bus) -> Result<(), GbError> {
-        let instr = bus.fetch_instruction(self.reg_pc)?;
-        let opcode = match instr.opcode() {
-            Some(op) => op,
-            None => {
-                let byte = bus.cpu_read_byte(self.reg_pc)?;
-                return Err(GbError::UnknownInstruction(byte));
+    fn jump_relative(&mut self, condition: &JumpCondition, offset: i8) {
+        if self.test_condition(condition) {
+            // TODO: find a better way to to this
+            if offset < 0 {
+                self.reg_pc -= offset.abs() as u16;
+            } else {
+                self.reg_pc += offset as u16;
+            }
+        }
+    }
+
+    fn load8(
+        &mut self,
+        bus: &Bus,
+        reg: &SingleRegType,
+        source: &SourceType,
+    ) -> Result<(), GbError> {
+        let val = match source {
+            SourceType::Addr(addr) => bus.read_byte(*addr)?,
+            SourceType::Imm8(imm) => *imm,
+            SourceType::Imm16(_) => {
+                return Err(GbError::IllegalOp("load imm16 into 8bit register".into()))
+            }
+            SourceType::RegImm(src_reg) => self.read_single_reg(src_reg),
+            SourceType::RegAddr(src_reg) => bus.read_byte(self.read_double_reg(src_reg))?,
+            SourceType::IoPortImm(imm) => bus.read_byte(0xFF00 + *imm as u16)?,
+            SourceType::IoPortReg(src_reg) => {
+                bus.read_byte(0xFF00 + self.read_single_reg(src_reg) as u16)?
             }
         };
 
-        self.reg_pc += instr.length()?;
-
-        match opcode {
-            Opcode::Nop => (),
-            Opcode::DecB => self.reg_b = ALU::dec(self, self.reg_b),
-            Opcode::IncB => self.reg_c = ALU::inc(self, self.reg_b),
-            Opcode::IncC => self.reg_c = ALU::inc(self, self.reg_c),
-            Opcode::DecC => self.reg_c = ALU::dec(self, self.reg_c),
-            Opcode::LdBd8 => self.reg_b = instr.byte(),
-            Opcode::LdCd8 => self.reg_c = instr.byte(),
-            Opcode::LdEd8 => self.reg_e = instr.byte(),
-            Opcode::Stop => self.low_power_mode = true,
-            Opcode::LdDEd16 => self.write_de(instr.word()),
-            Opcode::IncDE => self.write_de(self.read_de() + 1),
-            Opcode::RlA => {
-                self.reg_a = ALU::rlc(self, self.reg_a);
-                self.set_zero_flag(false); // investigate: why this special case?
-            }
-            Opcode::LdADE => self.reg_a = bus.cpu_read_byte(self.read_de())?,
-            Opcode::Jr => self.jump(instr.byte() as i8),
-            Opcode::Jrnz => {
-                if self.get_zero_flag() == false {
-                    self.jump(instr.byte() as i8);
-                }
-            }
-            Opcode::Jrz => {
-                if self.get_zero_flag() == true {
-                    self.jump(instr.byte() as i8);
-                }
-            }
-            Opcode::LdHLd16 => self.write_hl(instr.word()),
-            Opcode::LdHLincA => {
-                bus.cpu_write_byte(self.read_hl(), self.reg_a)?;
-                self.write_hl(self.read_hl() + 1);
-            }
-            Opcode::IncHL => self.write_hl(self.read_hl() + 1),
-            Opcode::LdLd8 => self.reg_l = instr.byte(),
-            Opcode::LdSPd16 => self.reg_sp = instr.word(),
-            Opcode::LdHLdecA => {
-                bus.cpu_write_byte(self.read_hl(), self.reg_a)?;
-                self.write_hl(self.read_hl() - 1);
-            }
-            Opcode::DecA => self.reg_a = ALU::dec(self, self.reg_a),
-            Opcode::LdAd8 => self.reg_a = instr.byte(),
-            Opcode::LdCA => self.reg_c = self.reg_a,
-            Opcode::LdDA => self.reg_d = self.reg_a,
-            Opcode::LdHA => self.reg_h = self.reg_a,
-            Opcode::LdHLA => bus.cpu_write_byte(self.read_hl(), self.reg_a)?,
-            Opcode::LdAE => self.reg_a = self.reg_e,
-            Opcode::AddAB => self.reg_a = ALU::add(self, self.reg_a, self.reg_b),
-            Opcode::SubAL => self.reg_a = ALU::sub(self, self.reg_a, self.reg_l),
-            Opcode::XorA => self.reg_a = ALU::xor(self, self.reg_a, self.reg_a),
-            Opcode::PopBC => {
-                let value = self.pop_stack(bus)?;
-                self.write_bc(value);
-            }
-            Opcode::PushCB => self.push_stack(bus, self.read_bc())?,
-            Opcode::Ret => self.reg_pc = self.pop_stack(bus)?,
-            Opcode::Prefix => match instr.cb_opcode() {
-                Some(CbOpcode::RlcC) => self.reg_c = ALU::rlc(self, self.reg_c),
-                Some(CbOpcode::SlaB) => self.reg_b = ALU::sla(self, self.reg_b),
-                Some(CbOpcode::Bit7H) => ALU::test_bit(self, self.reg_h, 7),
-                None => {
-                    return Err(GbError::UnknownCbInstruction(instr.byte()));
-                }
-            },
-            Opcode::Calla16 => {
-                let instr_len = instr.length()?;
-                self.push_stack(bus, self.reg_pc + instr_len)?;
-                self.reg_pc = instr.word();
-            }
-            Opcode::Ldha8A => bus.cpu_write_byte(0xFF00 + instr.byte() as u16, self.reg_a)?,
-            Opcode::Lda16A => self.reg_a = bus.cpu_read_byte(instr.word())?,
-            Opcode::LdhCA => bus.cpu_write_byte(0xFF00 + self.reg_c as u16, self.reg_a)?,
-            Opcode::LdhAa8 => self.reg_a = bus.cpu_read_byte(0xFF00 + instr.byte() as u16)?,
-            Opcode::Cpd8 => ALU::cp(self, self.reg_a, instr.byte()),
-        };
+        self.write_single_reg(reg, val);
         Ok(())
+    }
+
+    fn store(
+        &mut self,
+        bus: &mut Bus,
+        dest: &DestType,
+        src: &SingleRegType,
+        post_store: &PostStore,
+    ) -> Result<(), GbError> {
+        let addr = match dest {
+            DestType::Addr(addr) => *addr,
+            DestType::RegAddr(reg_addr) => self.read_double_reg(reg_addr),
+            DestType::IoPort(offset) => 0xFF00 + *offset as u16,
+            DestType::IoPortReg(reg_offset) => 0xFF00 + self.read_single_reg(reg_offset) as u16,
+        };
+
+        bus.write_byte(addr, self.read_single_reg(src))?;
+
+        match post_store {
+            PostStore::Inc => self.write_hl(self.read_hl() + 1),
+            PostStore::Dec => self.write_hl(self.read_hl() - 1),
+            PostStore::None => (),
+        }
+
+        Ok(())
+    }
+
+    fn call(&mut self, bus: &mut Bus, instr_len: u16, call_mode: &CallMode) -> Result<(), GbError> {
+        self.push_stack(bus, self.reg_pc + instr_len)?;
+
+        match call_mode {
+            CallMode::Absolute(addr) => self.reg_pc = *addr,
+        }
+
+        Ok(())
+    }
+
+    pub fn step(&mut self, bus: &mut Bus) -> Result<u8, GbError> {
+        let instr = bus.fetch_instruction(self.reg_pc)?;
+
+        self.reg_pc += instr.len();
+
+        match instr.instr_type() {
+            InstructionType::Nop => (),
+            InstructionType::Stop => self.low_power_mode = true,
+            InstructionType::Arithmetic(ar_type) => ALU::exec(self, ar_type),
+            InstructionType::JumpRelative(condition, offset) => {
+                self.jump_relative(condition, *offset)
+            }
+            InstructionType::Load8(reg, source) => self.load8(bus, reg, source)?,
+            InstructionType::Load16(reg, value) => self.write_double_reg(reg, *value),
+            InstructionType::Store(dest, reg, post_store) => {
+                self.store(bus, dest, reg, post_store)?
+            }
+            InstructionType::Push(reg_type) => {
+                self.push_stack(bus, self.read_double_reg(reg_type))?
+            }
+            InstructionType::Pop(reg) => {
+                let value = self.pop_stack(bus)?;
+                self.write_double_reg(reg, value);
+            }
+            InstructionType::Call(call_mode) => self.call(bus, instr.len(), call_mode)?,
+            InstructionType::Ret => self.reg_pc = self.pop_stack(bus)?,
+        }
+        Ok(instr.cycles())
     }
 
     pub fn state(&self) -> CpuState {
