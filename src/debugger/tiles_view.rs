@@ -57,7 +57,11 @@ pub struct TilesView {
 impl TilesView {
     pub fn show(&mut self, tiles: &TileList, ui: &mut egui::Ui) {
         if tiles.len() > TILE_PER_ROW {
-            self.texture = Some(ui.ctx().load_texture("tiles_view", create_image(tiles)));
+            self.texture = Some(ui.ctx().load_texture(
+                "tiles_view",
+                create_image(tiles),
+                egui::TextureOptions::default(),
+            ));
 
             let tex_ref = self.texture.as_ref().unwrap();
 

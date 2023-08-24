@@ -46,13 +46,14 @@ impl VideoDriver {
         let mut pixels = Pixels::new(ppu::SCREEN_WIDTH, ppu::SCREEN_HEIGHT, surface_texture)?;
         let mut ui = Ui::new(
             self.debugger.clone(),
+            &event_loop,
             self.width,
             self.height,
             scale_factor,
             &pixels,
         );
 
-        pixels.set_clear_color(pixels::wgpu::Color {
+        pixels.clear_color(pixels::wgpu::Color {
             r: 0.5,
             g: 0.5,
             b: 0.5,
@@ -63,7 +64,10 @@ impl VideoDriver {
         let render_slot = self.debugger.emu.read().unwrap().ppu().render_watch();
         event_loop.run(move |event, _, control_flow| {
             if input.update(&event) {
-                if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
+                if input.key_pressed(VirtualKeyCode::Escape)
+                    || input.close_requested()
+                    || input.destroyed()
+                {
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
@@ -73,7 +77,7 @@ impl VideoDriver {
                 }
 
                 if let Some(size) = input.window_resized() {
-                    pixels.resize_surface(size.width, size.height);
+                    pixels.resize_surface(size.width, size.height).unwrap();
                     ui.resize(size.width, size.height);
                 }
 
@@ -85,7 +89,7 @@ impl VideoDriver {
                 Event::RedrawRequested(_) => {
                     {
                         if let Ok(frame) = render_slot.try_recv() {
-                            pixels.get_frame().copy_from_slice(&frame);
+                            pixels.frame_mut().copy_from_slice(&frame);
                         }
                     }
 
@@ -94,7 +98,7 @@ impl VideoDriver {
                     let render_result = pixels.render_with(|encoder, render_target, context| {
                         context.scaling_renderer.render(encoder, render_target);
 
-                        ui.render(encoder, render_target, context)?;
+                        ui.render(encoder, render_target, context);
 
                         Ok(())
                     });

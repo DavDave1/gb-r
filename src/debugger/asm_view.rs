@@ -6,7 +6,6 @@ const COL_MIN_WIDTH: f32 = 20.0;
 pub fn show(asm: &AsmState, cpu: &CpuState, ui: &mut egui::Ui) {
     egui::ScrollArea::vertical()
         .auto_shrink([true, false])
-        .always_show_scroll(true)
         .show(ui, |ui| {
             egui::Grid::new("Asm View")
                 .min_col_width(COL_MIN_WIDTH)

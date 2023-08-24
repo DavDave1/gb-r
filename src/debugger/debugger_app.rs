@@ -2,7 +2,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use rustyline::Editor;
+use rustyline::DefaultEditor;
 
 use crate::debugger::commands::*;
 use crate::debugger::debugger::{Debugger, DebuggerCommand};
@@ -35,7 +35,7 @@ impl DebuggerApp {
     }
 
     fn run_prompt(debugger: Arc<Debugger>) {
-        let mut rl = Editor::<()>::new();
+        let mut rl = DefaultEditor::new().unwrap();
         let mut cmd_sig: Option<Sender<DebuggerCommand>> = None;
         loop {
             match rl.readline("gb-r> ") {

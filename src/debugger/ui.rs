@@ -1,9 +1,12 @@
-use egui::{ClippedMesh, Context, TexturesDelta, TopBottomPanel};
-use egui_wgpu_backend::{BackendError, RenderPass, ScreenDescriptor};
+use egui::ClippedPrimitive;
+use egui::{Context, TexturesDelta, TopBottomPanel};
+use egui_wgpu::renderer::ScreenDescriptor;
+use egui_wgpu::Renderer;
 use pixels::wgpu;
 use pixels::PixelsContext;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
+use winit::event_loop::EventLoopWindowTarget;
 use winit::{event::WindowEvent, window::Window};
 
 use crate::gbr::cpu::CpuState;
@@ -142,37 +145,38 @@ pub struct Ui {
     ctx: Context,
     egui_state: egui_winit::State,
     screen_descriptor: ScreenDescriptor,
-    rpass: RenderPass,
+    renderer: Renderer,
     textures: TexturesDelta,
-    paint_jobs: Vec<ClippedMesh>,
+    paint_jobs: Vec<ClippedPrimitive>,
     state: UiState,
 }
 
 impl Ui {
-    pub fn new(
+    pub fn new<T>(
         debugger: Arc<Debugger>,
+        event_loop: &EventLoopWindowTarget<T>,
         width: u32,
         height: u32,
         scale_factor: f32,
         pixels: &pixels::Pixels,
     ) -> Self {
-        let max_texure_size = pixels.device().limits().max_texture_dimension_2d as usize;
+        let max_texture_size = pixels.device().limits().max_texture_dimension_2d as usize;
 
-        let egui_state = egui_winit::State::from_pixels_per_point(max_texure_size, scale_factor);
-
+        let mut egui_state = egui_winit::State::new(event_loop);
+        egui_state.set_max_texture_side(max_texture_size);
+        egui_state.set_pixels_per_point(scale_factor);
         let screen_descriptor = ScreenDescriptor {
-            physical_width: width,
-            physical_height: height,
-            scale_factor,
+            size_in_pixels: [width, height],
+            pixels_per_point: scale_factor,
         };
 
-        let rpass = RenderPass::new(pixels.device(), pixels.render_texture_format(), 1);
+        let renderer = Renderer::new(pixels.device(), pixels.render_texture_format(), None, 1);
 
         Self {
             ctx: Context::default(),
             egui_state,
             screen_descriptor,
-            rpass,
+            renderer,
             paint_jobs: vec![],
             textures: TexturesDelta::default(),
             state: UiState::new(debugger),
@@ -180,18 +184,17 @@ impl Ui {
     }
 
     pub fn scale(&mut self, scale_factor: f32) {
-        self.screen_descriptor.scale_factor = scale_factor;
+        self.screen_descriptor.pixels_per_point = scale_factor;
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
-            self.screen_descriptor.physical_width = width;
-            self.screen_descriptor.physical_height = height;
+            self.screen_descriptor.size_in_pixels = [width, height];
         }
     }
 
     pub fn handle_event(&mut self, event: &WindowEvent) {
-        self.egui_state.on_event(&self.ctx, event);
+        let _ = self.egui_state.on_event(&self.ctx, event);
     }
 
     pub fn prepare(&mut self, window: &Window) {
@@ -212,26 +215,42 @@ impl Ui {
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
         context: &PixelsContext,
-    ) -> Result<(), BackendError> {
-        self.rpass
-            .add_textures(&context.device, &context.queue, &self.textures)?;
-
-        self.rpass.update_buffers(
+    ) {
+        for (id, image_delta) in &self.textures.set {
+            self.renderer
+                .update_texture(&context.device, &context.queue, *id, image_delta);
+        }
+        self.renderer.update_buffers(
             &context.device,
             &context.queue,
+            encoder,
             &self.paint_jobs,
             &self.screen_descriptor,
         );
 
-        self.rpass.execute(
-            encoder,
-            target,
-            &self.paint_jobs,
-            &self.screen_descriptor,
-            None,
-        )?;
+        // Render egui with WGPU
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("egui"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
 
+            self.renderer
+                .render(&mut rpass, &self.paint_jobs, &self.screen_descriptor);
+        }
+
+        // Cleanup
         let textures = std::mem::take(&mut self.textures);
-        self.rpass.remove_textures(textures)
+        for id in &textures.free {
+            self.renderer.free_texture(id);
+        }
     }
 }
