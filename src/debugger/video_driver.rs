@@ -1,6 +1,5 @@
 use log::error;
 use pixels::{Pixels, SurfaceTexture};
-use std::sync::Arc;
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -13,23 +12,21 @@ use crate::debugger::{debugger::Debugger, ui::Ui};
 use crate::gbr::ppu;
 
 pub struct VideoDriver {
-    debugger: Arc<Debugger>,
     width: u32,
     height: u32,
 }
 
 impl VideoDriver {
-    pub fn new(debugger: Arc<Debugger>, width: u32, height: u32) -> Self {
-        VideoDriver {
-            debugger,
-            width,
-            height,
-        }
+    pub fn new(width: u32, height: u32) -> Self {
+        VideoDriver { width, height }
     }
 
-    pub fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
-        log::debug!("window initialization");
+    pub fn start(&self, debugger: Debugger) -> Result<(), Box<dyn std::error::Error>> {
+        log::debug!("copy render slot");
 
+        let render_slot = debugger.render_slot();
+
+        log::debug!("create window");
         let event_loop = EventLoop::new();
         let mut input = WinitInputHelper::new();
 
@@ -40,12 +37,13 @@ impl VideoDriver {
             .with_min_inner_size(win_size)
             .build(&event_loop)?;
 
+        log::debug!("create render surface");
         let scale_factor = window.scale_factor() as f32;
 
         let surface_texture = SurfaceTexture::new(ppu::SCREEN_WIDTH, ppu::SCREEN_HEIGHT, &window);
         let mut pixels = Pixels::new(ppu::SCREEN_WIDTH, ppu::SCREEN_HEIGHT, surface_texture)?;
         let mut ui = Ui::new(
-            self.debugger.clone(),
+            debugger,
             &event_loop,
             self.width,
             self.height,
@@ -61,7 +59,7 @@ impl VideoDriver {
         });
 
         log::debug!("Starting video loop");
-        let render_slot = self.debugger.emu.read().unwrap().ppu().render_watch();
+
         event_loop.run(move |event, _, control_flow| {
             if input.update(&event) {
                 if input.key_pressed(VirtualKeyCode::Escape)

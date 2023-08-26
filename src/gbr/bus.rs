@@ -1,5 +1,4 @@
 use std::fs;
-use std::sync::Arc;
 
 use byteorder::{ByteOrder, LittleEndian};
 
@@ -13,15 +12,11 @@ pub struct Bus {
     cart_rom: Box<[u8]>,
     hram: Box<[u8]>,
     io_registers: IORegisters,
-    ppu: Arc<PPU>,
+    ppu: PPU,
 }
 
 impl Bus {
-    pub fn new(
-        boot_rom_filename: &std::path::Path,
-        cart_rom_filename: &std::path::Path,
-        ppu: Arc<PPU>,
-    ) -> Self {
+    pub fn new(boot_rom_filename: &std::path::Path, cart_rom_filename: &std::path::Path) -> Self {
         let boot_rom = fs::read(boot_rom_filename).expect("Failed to read boot rom");
 
         if boot_rom.len() != BOOT_ROM_SIZE {
@@ -36,8 +31,16 @@ impl Bus {
             cart_rom: cart_rom.into_boxed_slice(),
             hram: vec![0; HIGH_RAM_SIZE].into_boxed_slice(),
             io_registers: IORegisters::default(),
-            ppu,
+            ppu: PPU::new(),
         }
+    }
+
+    pub fn ppu(&self) -> &PPU {
+        &self.ppu
+    }
+
+    pub fn ppu_mut(&mut self) -> &mut PPU {
+        &mut self.ppu
     }
 
     pub fn io_registers(&self) -> &IORegisters {

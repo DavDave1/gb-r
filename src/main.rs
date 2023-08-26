@@ -18,6 +18,5 @@ fn main() {
         Path::new(&boot_rom_filename),
         Path::new(&cart_rom_filename),
     )));
-    let mut app = DebuggerApp::new(gb_emu);
-    app.run();
+    DebuggerApp::run(gb_emu);
 }

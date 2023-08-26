@@ -4,8 +4,6 @@ use egui_wgpu::renderer::ScreenDescriptor;
 use egui_wgpu::Renderer;
 use pixels::wgpu;
 use pixels::PixelsContext;
-use std::sync::mpsc::Sender;
-use std::sync::Arc;
 use winit::event_loop::EventLoopWindowTarget;
 use winit::{event::WindowEvent, window::Window};
 
@@ -17,19 +15,14 @@ use super::debugger::DebuggerCommand;
 use super::debugger::EmuState;
 use super::io_registers_view;
 use super::tiles_view::TilesView;
-use super::{
-    asm_view, cpu_view,
-    debugger::{AsmState, Debugger},
-};
+use super::{asm_view, cpu_view, debugger::Debugger};
 
 struct UiState {
     show_asm_view: bool,
     show_cpu_view: bool,
     show_registers_view: bool,
     show_tiles: bool,
-    debugger: Arc<Debugger>,
-    debugger_ch: Option<Sender<DebuggerCommand>>,
-    asm_state: AsmState,
+    debugger: Debugger,
     io_registers_state: IORegisters,
     cpu_state: CpuState,
     tiles_state: TileList,
@@ -38,21 +31,18 @@ struct UiState {
 }
 
 impl UiState {
-    fn new(debugger: Arc<Debugger>) -> Self {
-        let asm_state = debugger.disassemble();
+    fn new(debugger: Debugger) -> Self {
         Self {
             show_asm_view: true,
             show_cpu_view: true,
             show_registers_view: true,
             show_tiles: true,
             debugger,
-            debugger_ch: None,
-            asm_state,
             io_registers_state: IORegisters::default(),
             cpu_state: CpuState::default(),
             tiles_state: TileList::default(),
             tiles_view: TilesView::default(),
-            emu_state: EmuState::Reset,
+            emu_state: EmuState::Idle,
         }
     }
 
@@ -104,18 +94,29 @@ impl UiState {
         egui::TopBottomPanel::top("toolbar")
             .max_height(60.0)
             .show(ctx, |ui| {
-                ui.horizontal_top(|ui| {
-                    if ui.button("Run").clicked() {
-                        if let Some(ch) = self.debugger_ch.as_ref() {
-                            ch.send(DebuggerCommand::Stop).unwrap();
-                            self.debugger_ch = None;
-                        } else {
-                            self.debugger_ch = Some(self.debugger.run());
+                ui.horizontal_top(|ui| match self.emu_state {
+                    EmuState::Running => {
+                        if ui.button("Stop").clicked() {
+                            self.debugger.send_cmd(DebuggerCommand::Stop).unwrap();
+                        }
+
+                        if ui.button("Pause").clicked() {
+                            self.debugger.send_cmd(DebuggerCommand::Pause).unwrap();
                         }
                     }
+                    EmuState::Idle => {
+                        if ui.button("Start").clicked() {
+                            self.debugger.send_cmd(DebuggerCommand::Run).unwrap();
+                        }
 
-                    if ui.button("Step").clicked() {
-                        self.debugger.step();
+                        if ui.button("Step").clicked() {
+                            self.debugger.send_cmd(DebuggerCommand::Step).unwrap();
+                        }
+                    }
+                    EmuState::Error => {
+                        if ui.button("Stop").clicked() {
+                            self.debugger.send_cmd(DebuggerCommand::Stop).unwrap();
+                        }
                     }
                 });
             });
@@ -123,14 +124,26 @@ impl UiState {
         egui::SidePanel::new(egui::panel::Side::Left, "ASM")
             .default_width(400.0)
             .show(ctx, |ui| {
-                ui.horizontal_top(|ui| {
-                    asm_view::show(&self.asm_state, &self.cpu_state, ui);
-                    ui.vertical(|ui| {
-                        cpu_view::show(&self.cpu_state, ui);
-                        ui.separator();
-                        io_registers_view::show(&self.io_registers_state, ui);
-                    });
+                ui.vertical(|ui| {
+                    cpu_view::show(&self.cpu_state, ui);
+                    ui.separator();
+                    io_registers_view::show(&self.io_registers_state, ui);
                 });
+
+                // ui.horizontal_top(|ui| {
+                //     asm_view::show(&self.asm_state, &self.cpu_state, ui);
+                //     ui.vertical(|ui| {
+                //         cpu_view::show(&self.cpu_state, ui);
+                //         ui.separator();
+                //         io_registers_view::show(&self.io_registers_state, ui);
+                //     });
+                // });
+            });
+
+        egui::Window::new("ASM")
+            .open(&mut self.show_asm_view)
+            .show(ctx, |ui| {
+                asm_view::show(&self.debugger.asm(), &self.cpu_state, ui);
             });
 
         egui::Window::new("Tiles")
@@ -153,7 +166,7 @@ pub struct Ui {
 
 impl Ui {
     pub fn new<T>(
-        debugger: Arc<Debugger>,
+        debugger: Debugger,
         event_loop: &EventLoopWindowTarget<T>,
         width: u32,
         height: u32,

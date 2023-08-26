@@ -1,27 +1,64 @@
 use crate::{debugger::debugger::AsmState, gbr::cpu::CpuState};
 
-const COL_MIN_WIDTH: f32 = 20.0;
+use egui::{Label, Sense};
+use egui_extras::{Column, TableBuilder};
+use log::info;
+
+// const COL_MIN_WIDTH: f32 = 20.0;
 // const COL_MAX_WIDTH: f32 = 200.0;
 
 pub fn show(asm: &AsmState, cpu: &CpuState, ui: &mut egui::Ui) {
-    egui::ScrollArea::vertical()
+    let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
+
+    egui::ScrollArea::horizontal()
         .auto_shrink([true, false])
         .show(ui, |ui| {
-            egui::Grid::new("Asm View")
-                .min_col_width(COL_MIN_WIDTH)
-                // .max_col_width(COL_MAX_WIDTH)
+            TableBuilder::new(ui)
                 .striped(true)
-                .show(ui, |ui| {
-                    for (pc, instruction) in asm.iter() {
-                        let cursor = if *pc == cpu.pc { "> " } else { "" };
+                .resizable(false)
+                .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                .column(Column::exact(10.0))
+                .column(Column::exact(10.0))
+                .column(Column::remainder())
+                .min_scrolled_height(0.0)
+                .header(20.0, |mut header| {
+                    header.col(|ui| {
+                        ui.strong("");
+                    });
+                    header.col(|ui| {
+                        ui.strong("");
+                    });
+                    header.col(|ui| {
+                        ui.strong("ASM");
+                    });
+                })
+                .body(|body| {
+                    body.rows(text_height, asm.len(), |index, mut row| {
+                        let (pc, instruction) = asm.iter().nth(index).as_ref().unwrap();
 
-                        let label = match instruction {
-                            Some(instr) => format!("{}{:#06X}: {}", cursor, pc, instr),
-                            None => format!("{}{:#06X}: Unknonwn instruction", cursor, pc),
+                        row.col(|ui| {
+                            if ui
+                                .add(Label::new(" ").sense(Sense::click()))
+                                .double_clicked()
+                            {
+                                info!("Double clicked at {}", index);
+                            }
+                        });
+
+                        let cursor = if *pc == cpu.pc { ">" } else { "" };
+
+                        row.col(|ui| {
+                            ui.label(cursor);
+                        });
+
+                        let instr_label = match instruction {
+                            Some(instr) => format!("{:#06X}: {}", *pc, instr),
+                            None => format!("{:#06X}: Unknonwn", *pc),
                         };
-                        ui.label(label);
-                        ui.end_row();
-                    }
+                        row.col(|ui| {
+                            ui.label(instr_label);
+                        });
+                    });
                 });
         });
 }

@@ -1,5 +1,4 @@
 use byteorder::{ByteOrder, LittleEndian};
-use std::sync::{RwLock, RwLockReadGuard};
 
 use super::{
     io_registers::{
@@ -123,13 +122,13 @@ impl Tile {
 }
 
 pub struct PPU {
-    vram: RwLock<Box<[u8]>>,
+    vram: Box<[u8]>,
     lcd_control: LcdControlRegister,
     lcd_status: LcsStatusRegister,
 
     screen_buffer: Vec<u8>,
     render_buffer: Vec<u8>,
-    tile_list: RwLock<Vec<Tile>>,
+    tile_list: Vec<Tile>,
     palette: Box<[Rgba; 4]>,
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
 }
@@ -137,12 +136,12 @@ pub struct PPU {
 impl PPU {
     pub fn new() -> Self {
         Self {
-            vram: RwLock::new(vec![0; VIDEO_RAM_SIZE].into_boxed_slice()),
+            vram: vec![0; VIDEO_RAM_SIZE].into_boxed_slice(),
             lcd_control: LcdControlRegister::default(),
             lcd_status: LcsStatusRegister::default(),
             screen_buffer: vec![0; SCREEN_SIZE],
             render_buffer: vec![0; RENDER_FRAME_SIZE],
-            tile_list: RwLock::new(vec![Tile::default(); 3 * TILE_BLOCK_SIZE]),
+            tile_list: vec![Tile::default(); 3 * TILE_BLOCK_SIZE],
             palette: Box::new([Rgba::black(), Rgba::dark(), Rgba::light(), Rgba::white()]),
             render_ch: flume::bounded(1),
         }
@@ -157,8 +156,7 @@ impl PPU {
             return Ok(0xFF);
         }
 
-        let vram = self.vram.read().unwrap();
-        Ok(vram[addr as usize])
+        Ok(self.vram[addr as usize])
     }
 
     pub fn read_word(&self, addr: u16) -> Result<u16, GbError> {
@@ -170,43 +168,40 @@ impl PPU {
             return Err(GbError::AddrOutOfBounds(addr));
         }
 
-        let vram = self.vram.read().unwrap();
-        Ok(LittleEndian::read_u16(&vram[addr as usize..]))
+        Ok(LittleEndian::read_u16(&self.vram[addr as usize..]))
     }
 
-    pub fn write_byte(&self, addr: u16, value: u8) -> Result<(), GbError> {
+    pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         if addr as usize >= VIDEO_RAM_SIZE {
             return Err(GbError::AddrOutOfBounds(addr));
         }
 
         if !self.lcd_control.display_enable() {
-            let mut vram = self.vram.write().unwrap();
-            vram[addr as usize] = value;
+            self.vram[addr as usize] = value;
         }
 
         Ok(())
     }
 
-    pub fn tile_list(&self) -> RwLockReadGuard<Vec<Tile>> {
-        self.tile_list.read().unwrap()
+    pub fn tile_list(&self) -> &[Tile] {
+        &self.tile_list
     }
 
     pub fn render_watch(&self) -> flume::Receiver<ScreenBuffer> {
         self.render_ch.1.clone()
     }
 
-    pub fn render(&self) -> Result<(), GbError> {
+    pub fn render(&mut self) -> Result<(), GbError> {
         self.update_tile_list()?;
 
         self.render_ch.0.try_send(self.screen_buffer.clone()).ok();
         Ok(())
     }
 
-    fn update_tile_list(&self) -> Result<(), GbError> {
+    fn update_tile_list(&mut self) -> Result<(), GbError> {
         let mut tile_addr = 0;
 
         let mut tile_index = 0usize;
-        let mut tile_list = self.tile_list.write().unwrap();
         while tile_addr != TILE_DATA_SIZE {
             let mut tile_data = [0u8; TILE_DATA_SIZE];
 
@@ -215,7 +210,7 @@ impl PPU {
                 tile_addr += 2;
             }
 
-            tile_list[tile_index] = Tile::from_data(&tile_data, &(*self.palette));
+            self.tile_list[tile_index] = Tile::from_data(&tile_data, &(*self.palette));
             tile_index += 1;
         }
 
