@@ -1,14 +1,28 @@
-use crate::{debugger::debugger::AsmState, gbr::cpu::CpuState};
+use std::collections::HashSet;
+
+use crate::{
+    debugger::debugger::{AsmState, DebuggerCommand},
+    gbr::cpu::CpuState,
+};
 
 use egui::{Label, Sense};
 use egui_extras::{Column, TableBuilder};
 use log::info;
 
+use super::debugger::Debugger;
+
 // const COL_MIN_WIDTH: f32 = 20.0;
 // const COL_MAX_WIDTH: f32 = 200.0;
 
-pub fn show(asm: &AsmState, cpu: &CpuState, ui: &mut egui::Ui) {
+pub fn show(
+    debugger: &Debugger,
+    cpu: &CpuState,
+    breakpoints: &mut HashSet<u16>,
+    ui: &mut egui::Ui,
+) {
     let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
+
+    let asm = debugger.asm();
 
     egui::ScrollArea::horizontal()
         .auto_shrink([true, false])
@@ -37,11 +51,22 @@ pub fn show(asm: &AsmState, cpu: &CpuState, ui: &mut egui::Ui) {
                         let (pc, instruction) = asm.iter().nth(index).as_ref().unwrap();
 
                         row.col(|ui| {
-                            if ui
-                                .add(Label::new(" ").sense(Sense::click()))
-                                .double_clicked()
-                            {
-                                info!("Double clicked at {}", index);
+                            if breakpoints.contains(pc) {
+                                if ui
+                                    .add(Label::new("*").sense(Sense::click()))
+                                    .double_clicked()
+                                {
+                                    breakpoints.remove(pc);
+                                    debugger.send_cmd(DebuggerCommand::UnsetBreakpoint(*pc));
+                                }
+                            } else {
+                                if ui
+                                    .add(Label::new(" ").sense(Sense::click()))
+                                    .double_clicked()
+                                {
+                                    breakpoints.insert(*pc);
+                                    debugger.send_cmd(DebuggerCommand::SetBreakpoint(*pc));
+                                }
                             }
                         });
 

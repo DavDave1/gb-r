@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use egui::ClippedPrimitive;
 use egui::{Context, TexturesDelta, TopBottomPanel};
 use egui_wgpu::renderer::ScreenDescriptor;
@@ -28,6 +30,7 @@ struct UiState {
     tiles_state: TileList,
     tiles_view: TilesView,
     emu_state: EmuState,
+    breakpoints: HashSet<u16>,
 }
 
 impl UiState {
@@ -43,6 +46,7 @@ impl UiState {
             tiles_state: TileList::default(),
             tiles_view: TilesView::default(),
             emu_state: EmuState::Idle,
+            breakpoints: HashSet::new(),
         }
     }
 
@@ -143,7 +147,7 @@ impl UiState {
         egui::Window::new("ASM")
             .open(&mut self.show_asm_view)
             .show(ctx, |ui| {
-                asm_view::show(&self.debugger.asm(), &self.cpu_state, ui);
+                asm_view::show(&self.debugger, &self.cpu_state, &mut self.breakpoints, ui);
             });
 
         egui::Window::new("Tiles")

@@ -1,9 +1,10 @@
-use std::sync::{
-    mpsc::{channel, Sender},
-    Arc, RwLock,
+use std::{
+    collections::HashSet,
+    sync::{
+        mpsc::{channel, Sender},
+        Arc, RwLock,
+    },
 };
-
-use log::warn;
 
 use crate::gbr::instruction::Instruction;
 use crate::gbr::io_registers::IORegisters;
@@ -17,12 +18,8 @@ pub enum DebuggerCommand {
     Stop,
     Pause,
     Step,
-    SetBreakpoint(BreakPoint),
-    UnsetBreakpoint(BreakPoint),
-}
-
-pub struct BreakPoint {
-    pc: u16,
+    SetBreakpoint(u16),
+    UnsetBreakpoint(u16),
 }
 
 pub enum EmuState {
@@ -86,7 +83,10 @@ impl Debugger {
         std::thread::spawn(move || {
             let mut emu: std::sync::RwLockWriteGuard<'_, GameBoy> = emu.write().unwrap();
 
-            let mut run_mode = false;
+            let mut running = false;
+            let mut stepping = false;
+
+            let mut breakpoints = HashSet::<u16>::new();
 
             loop {
                 cpu_state_recv.drain();
@@ -102,7 +102,7 @@ impl Debugger {
                     .try_send(emu.ppu().tile_list().to_vec())
                     .ok();
 
-                let cmd = if !run_mode {
+                let cmd = if !running {
                     cmd_slot.recv().ok()
                 } else {
                     cmd_slot.try_recv().ok()
@@ -111,30 +111,39 @@ impl Debugger {
                 match cmd {
                     Some(DebuggerCommand::Run) => {
                         emu_state_sig.try_send(EmuState::Running).ok();
-                        run_mode = true;
+                        running = true;
                     }
                     Some(DebuggerCommand::Stop) => {
                         emu_state_sig.try_send(EmuState::Idle).ok();
                         emu.reset();
-                        run_mode = false;
+                        running = false;
                     }
                     Some(DebuggerCommand::Pause) => {
                         emu_state_sig.try_send(EmuState::Idle).ok();
-                        run_mode = false;
+                        running = false;
                     }
                     Some(DebuggerCommand::SetBreakpoint(pc)) => {
-                        warn!("Set breakpoint not implemented")
+                        breakpoints.insert(pc);
                     }
                     Some(DebuggerCommand::UnsetBreakpoint(pc)) => {
-                        warn!("Unset breakpoint not implemented")
+                        breakpoints.remove(&pc);
                     }
-                    Some(DebuggerCommand::Step) | None => (),
+                    Some(DebuggerCommand::Step) => stepping = true,
+                    None => (),
                 }
 
-                if let Err(e) = emu.step() {
-                    log::error!("emu error: {}", e);
-                    emu_state_sig.try_send(EmuState::Error).ok();
-                    break;
+                if running || stepping {
+                    stepping = false;
+
+                    if let Err(e) = emu.step() {
+                        log::error!("emu error: {}", e);
+                        emu_state_sig.try_send(EmuState::Error).ok();
+                        break;
+                    }
+                }
+
+                if breakpoints.contains(&emu.cpu().read_pc()) {
+                    running = false;
                 }
             }
         });
