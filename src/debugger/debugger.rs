@@ -69,25 +69,6 @@ impl Debugger {
         debugger
     }
 
-    // pub fn step(&self) {
-    //     if let Ok(mut emu) = self.emu.try_write() {
-    //         emu.step()
-    //             .map_err(|e| {
-    //                 log::error!("emu error: {}", e);
-    //                 self.emu_state.0.try_send(EmuState::Error).ok();
-    //             })
-    //             .ok();
-
-    //         self.cpu_state.0.try_send(emu.cpu().state()).ok();
-    //         self.io_registers_state
-    //             .0
-    //             .try_send(*emu.bus().io_registers())
-    //             .ok();
-    //     } else {
-    //         log::warn!("emu non accessible");
-    //     }
-    // }
-
     fn run(&mut self, emu: Arc<RwLock<GameBoy>>) {
         let (cmd_sig, cmd_slot) = channel::<DebuggerCommand>();
         self.cmd_ch = Some(cmd_sig);
