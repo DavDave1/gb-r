@@ -195,7 +195,7 @@ impl Debugger {
                 }
             };
 
-            let new_pc = pc + instruction.len();
+            let new_pc = pc + instruction.len() as u16;
             disassembly.push((pc, Some(instruction)));
             pc = new_pc;
         }

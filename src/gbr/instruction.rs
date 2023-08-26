@@ -53,6 +53,109 @@ pub enum Opcode {
 }
 }
 
+impl Opcode {
+    fn length(&self) -> u8 {
+        match self {
+            Opcode::Nop => 1,
+            Opcode::DecB => 1,
+            Opcode::IncB => 1,
+            Opcode::IncC => 1,
+            Opcode::DecC => 1,
+            Opcode::LdBd8 => 2,
+            Opcode::LdCd8 => 2,
+            Opcode::LdEd8 => 2,
+            Opcode::Stop => 1,
+            Opcode::LdDEd16 => 3,
+            Opcode::IncDE => 1,
+            Opcode::RlA => 1,
+            Opcode::LdADE => 1,
+            Opcode::Jr => 2,
+            Opcode::Jrnz => 2,
+            Opcode::Jrz => 2,
+            Opcode::LdHLd16 => 3,
+            Opcode::LdHLincA => 1,
+            Opcode::IncHL => 1,
+            Opcode::LdLd8 => 2,
+            Opcode::LdSPd16 => 3,
+            Opcode::LdHLdecA => 1,
+            Opcode::DecA => 1,
+            Opcode::LdAd8 => 2,
+            Opcode::LdCA => 1,
+            Opcode::LdDA => 1,
+            Opcode::LdHA => 1,
+            Opcode::LdHLA => 1,
+            Opcode::LdAE => 1,
+            Opcode::AddAB => 1,
+            Opcode::SubAL => 1,
+            Opcode::XorA => 1,
+            Opcode::PopBC => 1,
+            Opcode::PushBC => 1,
+            Opcode::Ret => 1,
+            Opcode::Prefix => 2,
+            Opcode::Calla16 => 3,
+            Opcode::Ldha8A => 2,
+            Opcode::Lda16A => 3,
+            Opcode::LdhCA => 1,
+            Opcode::LdhAa8 => 2,
+            Opcode::Cpd8 => 2,
+        }
+    }
+
+    // Get number of cycles of opcode.
+    //
+    // First element is cycles if jump is not takem
+    // Second element is cycles if jump is taken
+    //
+    // Note: For prefix instructions number of cycles is 0,
+    // check CpOpcode to get correct cycles
+    fn cycles(&self) -> (u8, u8) {
+        match self {
+            Self::Nop => (1, 1),
+            Self::DecB => (2, 2),
+            Self::IncB => (2, 2),
+            Self::IncC => (2, 2),
+            Self::DecC => (2, 2),
+            Self::LdBd8 => (2, 2),
+            Self::LdCd8 => (2, 2),
+            Self::LdEd8 => (2, 2),
+            Self::Stop => (1, 1),
+            Self::LdDEd16 => (3, 3),
+            Self::IncDE => (2, 2),
+            Self::RlA => (1, 1),
+            Self::LdADE => (2, 2),
+            Self::Jr => (3, 3),
+            Self::Jrnz => (2, 3),
+            Self::Jrz => (2, 3),
+            Self::LdHLd16 => (3, 3),
+            Self::LdHLincA => (2, 2),
+            Self::IncHL => (2, 2),
+            Self::LdLd8 => (2, 2),
+            Self::LdSPd16 => (3, 3),
+            Self::LdHLdecA => (2, 2),
+            Self::DecA => (2, 2),
+            Self::LdAd8 => (2, 2),
+            Self::LdCA => (1, 1),
+            Self::LdDA => (1, 1),
+            Self::LdHA => (1, 1),
+            Self::LdHLA => (2, 2),
+            Self::LdAE => (1, 1),
+            Self::AddAB => (1, 1),
+            Self::SubAL => (1, 1),
+            Self::XorA => (1, 1),
+            Self::PopBC => (3, 3),
+            Self::PushBC => (4, 4),
+            Self::Ret => (4, 4),
+            Self::Prefix => (0, 0),
+            Self::Calla16 => (6, 6),
+            Self::Ldha8A => (3, 3),
+            Self::Lda16A => (4, 4),
+            Self::LdhCA => (2, 2),
+            Self::LdhAa8 => (3, 3),
+            Self::Cpd8 => (2, 2),
+        }
+    }
+}
+
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 pub enum CbOpcode {
@@ -60,6 +163,16 @@ pub enum CbOpcode {
     SlaB = 0x20,
     Bit7H = 0x7C,
 }
+}
+
+impl CbOpcode {
+    pub fn cycles(&self) -> u8 {
+        match self {
+            Self::RlcC => 2,
+            Self::SlaB => 2,
+            Self::Bit7H => 2,
+        }
+    }
 }
 
 pub enum InstructionType {
@@ -258,8 +371,8 @@ impl Display for CallMode {
 
 pub struct Instruction {
     instr: InstructionType,
-    length: u16,
-    cycles: u8,
+    length: u8,
+    cycles: (u8, u8),
 }
 
 impl Instruction {
@@ -326,14 +439,24 @@ impl Instruction {
             }
         };
 
+        let cycles = match opcode {
+            Opcode::Prefix => {
+                let cycles = CbOpcode::from_u8(byte)
+                    .ok_or(GbError::UnknownCbInstruction(byte))?
+                    .cycles();
+                (cycles, cycles)
+            }
+            _ => opcode.cycles(),
+        };
+
         Ok(Self {
             instr,
-            length: Self::length(opcode),
-            cycles: 0,
+            length: opcode.length(),
+            cycles: cycles,
         })
     }
 
-    pub fn len(&self) -> u16 {
+    pub fn len(&self) -> u8 {
         self.length
     }
 
@@ -341,55 +464,8 @@ impl Instruction {
         &self.instr
     }
 
-    pub fn cycles(&self) -> u8 {
+    pub fn cycles(&self) -> (u8, u8) {
         self.cycles
-    }
-
-    fn length(opcode: Opcode) -> u16 {
-        match opcode {
-            Opcode::Nop => 1,
-            Opcode::DecB => 1,
-            Opcode::IncB => 1,
-            Opcode::IncC => 1,
-            Opcode::DecC => 1,
-            Opcode::LdBd8 => 2,
-            Opcode::LdCd8 => 2,
-            Opcode::LdEd8 => 2,
-            Opcode::Stop => 1,
-            Opcode::LdDEd16 => 3,
-            Opcode::IncDE => 1,
-            Opcode::RlA => 1,
-            Opcode::LdADE => 1,
-            Opcode::Jr => 2,
-            Opcode::Jrnz => 2,
-            Opcode::Jrz => 2,
-            Opcode::LdHLd16 => 3,
-            Opcode::LdHLincA => 1,
-            Opcode::IncHL => 1,
-            Opcode::LdLd8 => 2,
-            Opcode::LdSPd16 => 3,
-            Opcode::LdHLdecA => 1,
-            Opcode::DecA => 1,
-            Opcode::LdAd8 => 2,
-            Opcode::LdCA => 1,
-            Opcode::LdDA => 1,
-            Opcode::LdHA => 1,
-            Opcode::LdHLA => 1,
-            Opcode::LdAE => 1,
-            Opcode::AddAB => 1,
-            Opcode::SubAL => 1,
-            Opcode::XorA => 1,
-            Opcode::PopBC => 1,
-            Opcode::PushBC => 1,
-            Opcode::Ret => 1,
-            Opcode::Prefix => 2,
-            Opcode::Calla16 => 3,
-            Opcode::Ldha8A => 2,
-            Opcode::Lda16A => 3,
-            Opcode::LdhCA => 1,
-            Opcode::LdhAa8 => 2,
-            Opcode::Cpd8 => 2,
-        }
     }
 }
 

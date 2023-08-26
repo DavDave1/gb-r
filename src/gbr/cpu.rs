@@ -232,7 +232,7 @@ impl CPU {
         }
     }
 
-    fn jump_relative(&mut self, condition: &JumpCondition, offset: i8) {
+    fn jump_relative(&mut self, condition: &JumpCondition, offset: i8) -> bool {
         if self.test_condition(condition) {
             // TODO: find a better way to to this
             if offset < 0 {
@@ -240,7 +240,11 @@ impl CPU {
             } else {
                 self.reg_pc += offset as u16;
             }
+
+            return true;
         }
+
+        false
     }
 
     fn load8(
@@ -305,14 +309,16 @@ impl CPU {
     pub fn step(&mut self, bus: &mut Bus) -> Result<u8, GbError> {
         let instr = bus.fetch_instruction(self.reg_pc)?;
 
-        self.reg_pc += instr.len();
+        self.reg_pc += instr.len() as u16;
+
+        let mut jumped = false;
 
         match instr.instr_type() {
             InstructionType::Nop => (),
             InstructionType::Stop => self.low_power_mode = true,
             InstructionType::Arithmetic(ar_type) => ALU::exec(self, ar_type),
             InstructionType::JumpRelative(condition, offset) => {
-                self.jump_relative(condition, *offset)
+                jumped = self.jump_relative(condition, *offset);
             }
             InstructionType::Load8(reg, source) => self.load8(bus, reg, source)?,
             InstructionType::Load16(reg, value) => self.write_double_reg(reg, *value),
@@ -326,10 +332,17 @@ impl CPU {
                 let value = self.pop_stack(bus)?;
                 self.write_double_reg(reg, value);
             }
-            InstructionType::Call(call_mode) => self.call(bus, instr.len(), call_mode)?,
+            InstructionType::Call(call_mode) => self.call(bus, instr.len() as u16, call_mode)?,
             InstructionType::Ret => self.reg_pc = self.pop_stack(bus)?,
         }
-        Ok(instr.cycles())
+
+        let cycles = if jumped {
+            instr.cycles().1
+        } else {
+            instr.cycles().0
+        };
+
+        Ok(cycles)
     }
 
     pub fn state(&self) -> CpuState {
