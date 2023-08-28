@@ -19,12 +19,23 @@ impl GrayShade {
 
 impl From<u8> for GrayShade {
     fn from(value: u8) -> Self {
-        match value {
+        match value & 0b00000011 {
             0 => GrayShade::White,
             1 => GrayShade::LightGray,
             2 => GrayShade::DarkGray,
             3 => GrayShade::Black,
-            _ => panic!("Cannot convert {:#04X} into GrayShade", value),
+            _ => panic!("Cannot convert {} to GrayShade", value),
+        }
+    }
+}
+
+impl From<GrayShade> for u8 {
+    fn from(value: GrayShade) -> Self {
+        match value {
+            GrayShade::White => 0,
+            GrayShade::LightGray => 1,
+            GrayShade::DarkGray => 2,
+            GrayShade::Black => 3,
         }
     }
 }
@@ -75,5 +86,14 @@ impl From<u8> for BackgroundPalette {
             color_2: GrayShade::from(value >> 4 & mask),
             color_3: GrayShade::from(value >> 6 & mask),
         }
+    }
+}
+
+impl From<BackgroundPalette> for u8 {
+    fn from(value: BackgroundPalette) -> Self {
+        value.color_0 as u8
+            | (value.color_1 as u8) << 2
+            | (value.color_2 as u8) << 4
+            | (value.color_3 as u8) << 6
     }
 }

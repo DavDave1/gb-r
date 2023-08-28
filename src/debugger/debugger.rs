@@ -6,10 +6,10 @@ use std::{
     },
 };
 
-use crate::gbr::instruction::Instruction;
+use crate::gbr::game_boy::GameBoy;
 use crate::gbr::io_registers::IORegisters;
 use crate::gbr::{cpu::CpuState, ppu::ScreenBuffer};
-use crate::gbr::{game_boy::GameBoy, ppu::TileList};
+use crate::gbr::{instruction::Instruction, ppu::PpuState};
 
 pub type AsmState = Vec<(u16, Option<Instruction>)>;
 
@@ -31,7 +31,7 @@ pub enum EmuState {
 pub struct Debugger {
     cpu_state: (flume::Sender<CpuState>, flume::Receiver<CpuState>),
     io_registers_state: (flume::Sender<IORegisters>, flume::Receiver<IORegisters>),
-    tiles_state: (flume::Sender<TileList>, flume::Receiver<TileList>),
+    ppu_state: (flume::Sender<PpuState>, flume::Receiver<PpuState>),
     emu_state: (flume::Sender<EmuState>, flume::Receiver<EmuState>),
     cmd_ch: Option<Sender<DebuggerCommand>>,
     render_slot: flume::Receiver<ScreenBuffer>,
@@ -46,7 +46,7 @@ impl Debugger {
         let debugger = Debugger {
             cpu_state: flume::bounded(1),
             io_registers_state: flume::bounded(1),
-            tiles_state: flume::bounded(1),
+            ppu_state: flume::bounded(1),
             emu_state: flume::bounded(1),
             cmd_ch: None,
             render_slot,
@@ -72,12 +72,12 @@ impl Debugger {
 
         let cpu_state_sig = self.cpu_state.0.clone();
         let io_registers_state_sig = self.io_registers_state.0.clone();
-        let tiles_state_sig = self.tiles_state.0.clone();
+        let ppu_state_sig = self.ppu_state.0.clone();
         let emu_state_sig = self.emu_state.0.clone();
 
         let cpu_state_recv = self.cpu_state.1.clone();
         let io_regs_state_recv = self.io_registers_state.1.clone();
-        let tiles_state_recv = self.tiles_state.1.clone();
+        let ppu_state_recv = self.ppu_state.1.clone();
 
         self.emu_state.0.try_send(EmuState::Running).ok();
         std::thread::spawn(move || {
@@ -91,16 +91,14 @@ impl Debugger {
             loop {
                 cpu_state_recv.drain();
                 io_regs_state_recv.drain();
-                tiles_state_recv.drain();
+                ppu_state_recv.drain();
 
                 cpu_state_sig.try_send(emu.cpu().state()).ok();
                 io_registers_state_sig
                     .try_send(*emu.bus().io_registers())
                     .ok();
 
-                tiles_state_sig
-                    .try_send(emu.ppu().tile_list().to_vec())
-                    .ok();
+                ppu_state_sig.try_send(emu.ppu().state()).ok();
 
                 let cmd = if !running {
                     cmd_slot.recv().ok()
@@ -165,8 +163,8 @@ impl Debugger {
         self.io_registers_state.1.drain().last()
     }
 
-    pub fn tiles_state(&self) -> Option<TileList> {
-        self.tiles_state.1.drain().last()
+    pub fn ppu_state(&self) -> Option<PpuState> {
+        self.ppu_state.1.drain().last()
     }
 
     pub fn emu_state(&self) -> Option<EmuState> {

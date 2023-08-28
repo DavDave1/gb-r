@@ -2,7 +2,8 @@ use byteorder::{ByteOrder, LittleEndian};
 
 use super::{
     io_registers::{
-        lcd_control_register::LcdControlRegister, lcd_status_register::LcsStatusRegister,
+        background_palette, lcd_control_register::LcdControlRegister,
+        lcd_status_register::LcsStatusRegister,
     },
     memory_map::VIDEO_RAM_SIZE,
     GbError,
@@ -121,16 +122,29 @@ impl Tile {
     }
 }
 
+#[derive(Default)]
+pub struct PpuState {
+    pub lcd_control: LcdControlRegister,
+    pub lcd_status: LcsStatusRegister,
+    pub bg_palette: background_palette::BackgroundPalette,
+    pub ly: u8,
+    pub viewport: (u8, u8),
+    pub tile_list: Vec<Tile>,
+}
+
 pub struct PPU {
     vram: Box<[u8]>,
     lcd_control: LcdControlRegister,
     lcd_status: LcsStatusRegister,
-
+    bg_palette: background_palette::BackgroundPalette,
+    ly: u8,
+    viewport: (u8, u8),
     screen_buffer: Vec<u8>,
     render_buffer: Vec<u8>,
     tile_list: Vec<Tile>,
     palette: Box<[Rgba; 4]>,
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
+    dots: u16,
 }
 
 impl PPU {
@@ -139,12 +153,24 @@ impl PPU {
             vram: vec![0; VIDEO_RAM_SIZE].into_boxed_slice(),
             lcd_control: LcdControlRegister::default(),
             lcd_status: LcsStatusRegister::default(),
+            bg_palette: Default::default(),
+            ly: 0,
+            viewport: (0, 0),
             screen_buffer: vec![0; SCREEN_SIZE],
             render_buffer: vec![0; RENDER_FRAME_SIZE],
             tile_list: vec![Tile::default(); 3 * TILE_BLOCK_SIZE],
             palette: Box::new([Rgba::black(), Rgba::dark(), Rgba::light(), Rgba::white()]),
             render_ch: flume::bounded(1),
+            dots: 0,
         }
+    }
+
+    pub fn step(&mut self, cpu_cycles: u8) {
+        if !self.lcd_control.display_enable {
+            return;
+        }
+
+        // self.dots += cpu_cycles as u16;
     }
 
     pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
@@ -152,7 +178,7 @@ impl PPU {
             return Err(GbError::AddrOutOfBounds(addr));
         }
 
-        if self.lcd_control.display_enable() {
+        if self.lcd_control.display_enable {
             return Ok(0xFF);
         }
 
@@ -160,7 +186,7 @@ impl PPU {
     }
 
     pub fn read_word(&self, addr: u16) -> Result<u16, GbError> {
-        if self.lcd_control.display_enable() {
+        if self.lcd_control.display_enable {
             return Ok(0xFFFF);
         }
 
@@ -176,11 +202,41 @@ impl PPU {
             return Err(GbError::AddrOutOfBounds(addr));
         }
 
-        if !self.lcd_control.display_enable() {
+        if !self.lcd_control.display_enable {
             self.vram[addr as usize] = value;
         }
 
         Ok(())
+    }
+
+    pub fn read_reg(&self, addr: u16) -> Result<u8, GbError> {
+        match addr {
+            0x0040 => Ok(self.lcd_control.into()),
+            0x0041 => Ok(self.lcd_status.into()),
+            0x0042 => Ok(self.viewport.0),
+            0x0043 => Ok(self.viewport.1),
+            0x0044 => Ok(self.ly),
+            0x0047 => Ok(self.bg_palette.into()),
+            _ => Err(GbError::IllegalOp(format!(
+                "Write to invalid PPU reg {:#06X}",
+                addr
+            ))),
+        }
+    }
+
+    pub fn write_reg(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
+        match addr {
+            0x0040 => Ok(self.lcd_control = value.into()),
+            0x0041 => Ok(self.lcd_status = value.into()),
+            0x0042 => Ok(self.viewport.0 = value),
+            0x0043 => Ok(self.viewport.1 = value),
+            0x0044 => Err(GbError::IllegalOp("Cannot write to LY register".into())),
+            0x0047 => Ok(self.bg_palette = value.into()),
+            _ => Err(GbError::IllegalOp(format!(
+                "Write to invalid PPU reg {:#06X}",
+                addr
+            ))),
+        }
     }
 
     pub fn tile_list(&self) -> &[Tile] {
@@ -215,5 +271,16 @@ impl PPU {
         }
 
         Ok(())
+    }
+
+    pub fn state(&self) -> PpuState {
+        PpuState {
+            lcd_control: self.lcd_control,
+            lcd_status: self.lcd_status,
+            bg_palette: self.bg_palette,
+            ly: self.ly,
+            viewport: self.viewport,
+            tile_list: self.tile_list.clone(),
+        }
     }
 }

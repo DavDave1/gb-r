@@ -32,19 +32,4 @@ pub fn show(io_regs: &IORegisters, ui: &mut egui::Ui) {
         "Sound channel volume control: {:#010b}",
         io_regs.sound_channel_volume_control()
     ));
-
-    ui.label(format!(
-        "Background palette: {} - {} - {} - {}",
-        io_regs.bg_palette().color_0().as_ascii(),
-        io_regs.bg_palette().color_1().as_ascii(),
-        io_regs.bg_palette().color_2().as_ascii(),
-        io_regs.bg_palette().color_3().as_ascii()
-    ));
-
-    ui.label(format!(
-        "LCD control: {:#010b}",
-        io_regs.lcd_control().raw()
-    ));
-
-    ui.label(format!("LCD status: {:#010b}", io_regs.lcd_status().raw()));
 }

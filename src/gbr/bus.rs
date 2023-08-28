@@ -89,7 +89,10 @@ impl Bus {
             MappedAddress::SpriteAttributeTable(addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
-            MappedAddress::IORegisters(addr) => self.io_registers.read(addr),
+            MappedAddress::IORegisters(addr) => match addr {
+                PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.read_reg(addr),
+                _ => self.io_registers.read(addr),
+            },
             MappedAddress::HighRam(addr) => Ok(self.hram[addr as usize]),
             MappedAddress::InterruptEnableRegister => Err(GbError::Unimplemented(
                 "reading interrupr enable register".into(),
@@ -116,7 +119,10 @@ impl Bus {
             MappedAddress::SpriteAttributeTable(addr) => Err(GbError::Unimplemented(
                 "writing to sprite attribute table".into(),
             )),
-            MappedAddress::IORegisters(addr) => self.io_registers.write(addr, value),
+            MappedAddress::IORegisters(addr) => match addr {
+                PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.write_reg(addr, value),
+                _ => self.io_registers.write(addr, value),
+            },
             MappedAddress::HighRam(addr) => {
                 self.hram[addr as usize] = value;
                 Ok(())

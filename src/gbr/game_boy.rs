@@ -16,11 +16,9 @@ impl GameBoy {
     }
 
     pub fn step(&mut self) -> Result<(), GbError> {
-        let _cycles = self.cpu.step(&mut self.bus)?;
+        let cycles = self.cpu.step(&mut self.bus)?;
 
-        if self.bus.io_registers().lcd_control().display_enable() {
-            self.bus.ppu_mut().render()?;
-        }
+        self.bus.ppu_mut().step(cycles);
 
         Ok(())
     }

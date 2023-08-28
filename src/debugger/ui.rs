@@ -11,7 +11,7 @@ use winit::{event::WindowEvent, window::Window};
 
 use crate::gbr::cpu::CpuState;
 use crate::gbr::io_registers::IORegisters;
-use crate::gbr::ppu::TileList;
+use crate::gbr::ppu::{PpuState, TileList};
 
 use super::debugger::DebuggerCommand;
 use super::debugger::EmuState;
@@ -27,6 +27,7 @@ struct UiState {
     debugger: Debugger,
     io_registers_state: IORegisters,
     cpu_state: CpuState,
+    ppu_state: PpuState,
     tiles_state: TileList,
     tiles_view: TilesView,
     emu_state: EmuState,
@@ -43,6 +44,7 @@ impl UiState {
             debugger,
             io_registers_state: IORegisters::default(),
             cpu_state: CpuState::default(),
+            ppu_state: PpuState::default(),
             tiles_state: TileList::default(),
             tiles_view: TilesView::default(),
             emu_state: EmuState::Idle,
@@ -57,8 +59,8 @@ impl UiState {
         if let Some(state) = self.debugger.cpu_state() {
             self.cpu_state = state;
         }
-        if let Some(state) = self.debugger.tiles_state() {
-            self.tiles_state = state;
+        if let Some(state) = self.debugger.ppu_state() {
+            self.ppu_state = state;
         }
 
         if let Some(state) = self.debugger.emu_state() {
@@ -71,7 +73,7 @@ impl UiState {
 
         TopBottomPanel::top("menubar_container").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
-                ui.menu_button("Debug", |ui| {
+                ui.menu_button("Window", |ui| {
                     if ui.button("Asm view...").clicked() {
                         self.show_asm_view = true;
                         ui.close_menu();
@@ -126,34 +128,44 @@ impl UiState {
             });
 
         egui::SidePanel::new(egui::panel::Side::Left, "ASM")
-            .default_width(400.0)
+            .default_width(300.0)
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     cpu_view::show(&self.cpu_state, ui);
                     ui.separator();
                     io_registers_view::show(&self.io_registers_state, ui);
+                    ui.separator();
+                    asm_view::show(&self.debugger, &self.cpu_state, &mut self.breakpoints, ui);
                 });
-
-                // ui.horizontal_top(|ui| {
-                //     asm_view::show(&self.asm_state, &self.cpu_state, ui);
-                //     ui.vertical(|ui| {
-                //         cpu_view::show(&self.cpu_state, ui);
-                //         ui.separator();
-                //         io_registers_view::show(&self.io_registers_state, ui);
-                //     });
-                // });
             });
 
-        egui::Window::new("ASM")
-            .open(&mut self.show_asm_view)
+        egui::SidePanel::new(egui::panel::Side::Right, "tiles")
+            .default_width(300.0)
             .show(ctx, |ui| {
-                asm_view::show(&self.debugger, &self.cpu_state, &mut self.breakpoints, ui);
-            });
-
-        egui::Window::new("Tiles")
-            .open(&mut self.show_tiles)
-            .show(ctx, |ui| {
-                self.tiles_view.show(&self.tiles_state, ui);
+                ui.vertical(|ui| {
+                    ui.heading("Tiles");
+                    self.tiles_view.show(&self.tiles_state, ui);
+                    ui.separator();
+                    ui.heading("LCD Ctrl");
+                    ui.label(format!("{}", self.ppu_state.lcd_control));
+                    ui.separator();
+                    ui.heading("LCD Status");
+                    ui.label(format!("{}", self.ppu_state.lcd_status));
+                    ui.heading("Viewport");
+                    ui.label(format!(
+                        "X: {}, Y: {}, LY: {}",
+                        self.ppu_state.viewport.0, self.ppu_state.viewport.1, self.ppu_state.ly
+                    ));
+                    ui.separator();
+                    ui.heading("Palette");
+                    ui.label(format!(
+                        "C0: {}, C1: {}, C3: {}, C4: {}",
+                        self.ppu_state.bg_palette.color_0() as u8,
+                        self.ppu_state.bg_palette.color_1() as u8,
+                        self.ppu_state.bg_palette.color_2() as u8,
+                        self.ppu_state.bg_palette.color_3() as u8,
+                    ));
+                });
             });
     }
 }

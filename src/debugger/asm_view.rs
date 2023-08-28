@@ -1,18 +1,11 @@
 use std::collections::HashSet;
 
-use crate::{
-    debugger::debugger::{AsmState, DebuggerCommand},
-    gbr::cpu::CpuState,
-};
+use crate::{debugger::debugger::DebuggerCommand, gbr::cpu::CpuState};
 
 use egui::{Label, Sense};
 use egui_extras::{Column, TableBuilder};
-use log::info;
 
 use super::debugger::Debugger;
-
-// const COL_MIN_WIDTH: f32 = 20.0;
-// const COL_MAX_WIDTH: f32 = 200.0;
 
 pub fn show(
     debugger: &Debugger,
@@ -35,17 +28,6 @@ pub fn show(
                 .column(Column::exact(10.0))
                 .column(Column::remainder())
                 .min_scrolled_height(0.0)
-                .header(20.0, |mut header| {
-                    header.col(|ui| {
-                        ui.strong("");
-                    });
-                    header.col(|ui| {
-                        ui.strong("");
-                    });
-                    header.col(|ui| {
-                        ui.strong("ASM");
-                    });
-                })
                 .body(|body| {
                     body.rows(text_height, asm.len(), |index, mut row| {
                         let (pc, instruction) = asm.iter().nth(index).as_ref().unwrap();

@@ -16,11 +16,6 @@ pub struct IORegisters {
     sound_channel_1_volume_envelope: u8,
     sound_output_terminal_selection: u8,
     sound_channel_volume_control: u8,
-    bg_palette_data: background_palette::BackgroundPalette,
-    lcd_control: lcd_control_register::LcdControlRegister,
-    lcd_status: lcd_status_register::LcsStatusRegister,
-    scroll_y: u8,
-    y_coordinate: u8,
 }
 
 impl IORegisters {
@@ -56,18 +51,6 @@ impl IORegisters {
         self.sound_channel_volume_control
     }
 
-    pub fn bg_palette(&self) -> &background_palette::BackgroundPalette {
-        &self.bg_palette_data
-    }
-
-    pub fn lcd_control(&self) -> &lcd_control_register::LcdControlRegister {
-        &self.lcd_control
-    }
-
-    pub fn lcd_status(&self) -> &lcd_status_register::LcsStatusRegister {
-        &self.lcd_status
-    }
-
     pub fn write(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match addr {
             0x0000 => Ok(self.port_p1 = value),
@@ -87,10 +70,6 @@ impl IORegisters {
                     Ok(self.sound_enable = value)
                 }
             }
-            0x0040 => Ok(self.lcd_control = value.into()),
-            0x0041 => Ok(self.lcd_status = value.into()),
-            0x0042 => Ok(self.scroll_y = value),
-            0x0047 => Ok(self.bg_palette_data = value.into()),
             _ => Err(GbError::Unimplemented(format!(
                 "write to io register {:#06X}",
                 addr + IO_REGISTERS_START
@@ -103,7 +82,6 @@ impl IORegisters {
             0x0000 => Ok(self.port_p1),
             0x0001 => Ok(self.serial_data),
             0x0002 => Ok(self.serial_control),
-            0x0044 => Ok(self.y_coordinate),
             _ => Err(GbError::Unimplemented(format!(
                 "read from io register {:#06X}",
                 addr + IO_REGISTERS_START
