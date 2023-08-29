@@ -28,14 +28,19 @@ pub enum EmuState {
     Error,
 }
 
+#[derive(Default)]
+pub struct GbState {
+    pub cpu: CpuState,
+    pub io_registers: IORegisters,
+    pub ppu: PpuState,
+}
+
 pub struct Debugger {
-    cpu_state: (flume::Sender<CpuState>, flume::Receiver<CpuState>),
-    io_registers_state: (flume::Sender<IORegisters>, flume::Receiver<IORegisters>),
-    ppu_state: (flume::Sender<PpuState>, flume::Receiver<PpuState>),
     emu_state: (flume::Sender<EmuState>, flume::Receiver<EmuState>),
     cmd_ch: Option<Sender<DebuggerCommand>>,
     render_slot: flume::Receiver<ScreenBuffer>,
     asm: AsmState,
+    pub gb_state: Arc<RwLock<GbState>>,
 }
 
 impl Debugger {
@@ -44,13 +49,11 @@ impl Debugger {
         let asm = Self::disassemble(game_boy);
 
         let debugger = Debugger {
-            cpu_state: flume::bounded(1),
-            io_registers_state: flume::bounded(1),
-            ppu_state: flume::bounded(1),
             emu_state: flume::bounded(1),
             cmd_ch: None,
             render_slot,
             asm,
+            gb_state: Default::default(),
         };
 
         debugger.emu_state.0.try_send(EmuState::Idle).ok();
@@ -61,23 +64,16 @@ impl Debugger {
     pub fn attach(gb: Arc<RwLock<GameBoy>>) -> Self {
         let mut debugger = Debugger::new(gb.clone());
 
-        debugger.run(gb);
+        debugger.run(gb, debugger.gb_state.clone());
 
         debugger
     }
 
-    fn run(&mut self, emu: Arc<RwLock<GameBoy>>) {
+    fn run(&mut self, emu: Arc<RwLock<GameBoy>>, state: Arc<RwLock<GbState>>) {
         let (cmd_sig, cmd_slot) = channel::<DebuggerCommand>();
         self.cmd_ch = Some(cmd_sig);
 
-        let cpu_state_sig = self.cpu_state.0.clone();
-        let io_registers_state_sig = self.io_registers_state.0.clone();
-        let ppu_state_sig = self.ppu_state.0.clone();
         let emu_state_sig = self.emu_state.0.clone();
-
-        let cpu_state_recv = self.cpu_state.1.clone();
-        let io_regs_state_recv = self.io_registers_state.1.clone();
-        let ppu_state_recv = self.ppu_state.1.clone();
 
         self.emu_state.0.try_send(EmuState::Running).ok();
         std::thread::spawn(move || {
@@ -89,16 +85,11 @@ impl Debugger {
             let mut breakpoints = HashSet::<u16>::new();
 
             loop {
-                cpu_state_recv.drain();
-                io_regs_state_recv.drain();
-                ppu_state_recv.drain();
-
-                cpu_state_sig.try_send(emu.cpu().state()).ok();
-                io_registers_state_sig
-                    .try_send(*emu.bus().io_registers())
-                    .ok();
-
-                ppu_state_sig.try_send(emu.ppu().state()).ok();
+                if let Ok(mut state) = state.try_write() {
+                    state.cpu = emu.cpu().state();
+                    state.io_registers = emu.bus().io_registers().clone();
+                    state.ppu = emu.bus().ppu().state();
+                }
 
                 let cmd = if !running {
                     cmd_slot.recv().ok()
@@ -154,17 +145,6 @@ impl Debugger {
 
     pub fn asm(&self) -> &AsmState {
         &self.asm
-    }
-    pub fn cpu_state(&self) -> Option<CpuState> {
-        self.cpu_state.1.drain().last()
-    }
-
-    pub fn io_registers_state(&self) -> Option<IORegisters> {
-        self.io_registers_state.1.drain().last()
-    }
-
-    pub fn ppu_state(&self) -> Option<PpuState> {
-        self.ppu_state.1.drain().last()
     }
 
     pub fn emu_state(&self) -> Option<EmuState> {

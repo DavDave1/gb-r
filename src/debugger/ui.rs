@@ -9,10 +9,6 @@ use pixels::PixelsContext;
 use winit::event_loop::EventLoopWindowTarget;
 use winit::{event::WindowEvent, window::Window};
 
-use crate::gbr::cpu::CpuState;
-use crate::gbr::io_registers::IORegisters;
-use crate::gbr::ppu::{PpuState, TileList};
-
 use super::debugger::DebuggerCommand;
 use super::debugger::EmuState;
 use super::io_registers_view;
@@ -25,10 +21,6 @@ struct UiState {
     show_registers_view: bool,
     show_tiles: bool,
     debugger: Debugger,
-    io_registers_state: IORegisters,
-    cpu_state: CpuState,
-    ppu_state: PpuState,
-    tiles_state: TileList,
     tiles_view: TilesView,
     emu_state: EmuState,
     breakpoints: HashSet<u16>,
@@ -42,10 +34,6 @@ impl UiState {
             show_registers_view: true,
             show_tiles: true,
             debugger,
-            io_registers_state: IORegisters::default(),
-            cpu_state: CpuState::default(),
-            ppu_state: PpuState::default(),
-            tiles_state: TileList::default(),
             tiles_view: TilesView::default(),
             emu_state: EmuState::Idle,
             breakpoints: HashSet::new(),
@@ -53,16 +41,6 @@ impl UiState {
     }
 
     fn update_debug_data(&mut self) {
-        if let Some(state) = self.debugger.io_registers_state() {
-            self.io_registers_state = state;
-        }
-        if let Some(state) = self.debugger.cpu_state() {
-            self.cpu_state = state;
-        }
-        if let Some(state) = self.debugger.ppu_state() {
-            self.ppu_state = state;
-        }
-
         if let Some(state) = self.debugger.emu_state() {
             self.emu_state = state;
         }
@@ -127,15 +105,17 @@ impl UiState {
                 });
             });
 
+        let gb_state = self.debugger.gb_state.read().unwrap();
+
         egui::SidePanel::new(egui::panel::Side::Left, "ASM")
             .default_width(300.0)
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
-                    cpu_view::show(&self.cpu_state, ui);
+                    cpu_view::show(&gb_state.cpu, ui);
                     ui.separator();
-                    io_registers_view::show(&self.io_registers_state, ui);
+                    io_registers_view::show(&gb_state.io_registers, ui);
                     ui.separator();
-                    asm_view::show(&self.debugger, &self.cpu_state, &mut self.breakpoints, ui);
+                    asm_view::show(&self.debugger, &gb_state.cpu, &mut self.breakpoints, ui);
                 });
             });
 
@@ -144,26 +124,26 @@ impl UiState {
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     ui.heading("Tiles");
-                    self.tiles_view.show(&self.tiles_state, ui);
+                    self.tiles_view.show(&gb_state.ppu.tile_list, ui);
                     ui.separator();
                     ui.heading("LCD Ctrl");
-                    ui.label(format!("{}", self.ppu_state.lcd_control));
+                    ui.label(format!("{}", gb_state.ppu.lcd_control));
                     ui.separator();
                     ui.heading("LCD Status");
-                    ui.label(format!("{}", self.ppu_state.lcd_status));
+                    ui.label(format!("{}", gb_state.ppu.lcd_status));
                     ui.heading("Viewport");
                     ui.label(format!(
                         "X: {}, Y: {}, LY: {}",
-                        self.ppu_state.viewport.0, self.ppu_state.viewport.1, self.ppu_state.ly
+                        gb_state.ppu.viewport.0, gb_state.ppu.viewport.1, gb_state.ppu.ly
                     ));
                     ui.separator();
                     ui.heading("Palette");
                     ui.label(format!(
                         "C0: {}, C1: {}, C3: {}, C4: {}",
-                        self.ppu_state.bg_palette.color_0() as u8,
-                        self.ppu_state.bg_palette.color_1() as u8,
-                        self.ppu_state.bg_palette.color_2() as u8,
-                        self.ppu_state.bg_palette.color_3() as u8,
+                        gb_state.ppu.bg_palette.color_0() as u8,
+                        gb_state.ppu.bg_palette.color_1() as u8,
+                        gb_state.ppu.bg_palette.color_2() as u8,
+                        gb_state.ppu.bg_palette.color_3() as u8,
                     ));
                 });
             });
