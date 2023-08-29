@@ -18,7 +18,7 @@ impl GameBoy {
     pub fn step(&mut self) -> Result<(), GbError> {
         let cycles = self.cpu.step(&mut self.bus)?;
 
-        self.bus.ppu_mut().step(cycles);
+        self.bus.ppu_mut().step(cycles)?;
 
         Ok(())
     }

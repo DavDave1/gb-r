@@ -12,9 +12,6 @@ const VIDEO_RAM_START: u16 = 0x8000;
 const VIDEO_RAM_END: u16 = 0x9FFF;
 pub const VIDEO_RAM_SIZE: usize = (VIDEO_RAM_END - VIDEO_RAM_START + 1) as usize;
 
-pub const TILE_DATA_START: u16 = VIDEO_RAM_START;
-pub const TILE_DATA_END: u16 = 0x97FF;
-
 const EXTERNAL_RAM_START: u16 = 0xA000;
 const EXTERNAL_RAM_END: u16 = 0xBFFF;
 const WORK_RAM_BANK0_START: u16 = 0xC000;
