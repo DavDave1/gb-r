@@ -1,4 +1,4 @@
-use egui::ColorImage;
+use egui::{ColorImage, TextureOptions};
 use image::{GenericImage, RgbaImage};
 
 use crate::gbr::ppu::{TileList, TILE_HEIGHT, TILE_WIDTH};
@@ -57,11 +57,16 @@ pub struct TilesView {
 impl TilesView {
     pub fn show(&mut self, tiles: &TileList, ui: &mut egui::Ui) {
         if tiles.len() > TILE_PER_ROW {
-            self.texture = Some(ui.ctx().load_texture(
-                "tiles_view",
-                create_image(tiles),
-                egui::TextureOptions::default(),
-            ));
+            match self.texture.as_mut() {
+                None => {
+                    self.texture = Some(ui.ctx().load_texture(
+                        "tiles_view",
+                        create_image(tiles),
+                        egui::TextureOptions::default(),
+                    ));
+                }
+                Some(tex_ref) => tex_ref.set(create_image(tiles), TextureOptions::default()),
+            }
 
             let tex_ref = self.texture.as_ref().unwrap();
 

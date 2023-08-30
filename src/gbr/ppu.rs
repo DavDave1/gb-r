@@ -357,7 +357,6 @@ impl PPU {
             tile_index += 1;
             addr += TILE_DATA_SIZE;
         }
-        log::info!("last index {}, addr {}", tile_index, addr);
     }
 
     pub fn state(&self) -> PpuState {
