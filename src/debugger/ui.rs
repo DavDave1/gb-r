@@ -124,7 +124,7 @@ impl UiState {
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     ui.heading("Tiles");
-                    self.tiles_view.show(&gb_state.ppu.tile_list, ui);
+                    self.tiles_view.show(&gb_state.ppu.bg_win_tiles, ui);
                     ui.separator();
                     ui.heading("LCD Ctrl");
                     ui.label(format!("{}", gb_state.ppu.lcd_control));

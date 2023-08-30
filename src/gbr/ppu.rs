@@ -12,7 +12,13 @@ use super::{
     GbError,
 };
 
-pub const TILE_DATA_END: u16 = 0x17FF;
+// rlative to VRAM base addr
+const TILE_BLOCK0_START: u16 = 0x0000;
+const TILE_BLOCK0_END: u16 = 0x07FF;
+const TILE_BLOCK1_START: u16 = TILE_BLOCK0_END + 1;
+const TILE_BLOCK1_END: u16 = 0x0FFF;
+const TILE_BLOCK2_START: u16 = TILE_BLOCK1_END + 1;
+const TILE_BLOCK2_END: u16 = 0x17FF;
 
 pub const SCREEN_WIDTH: u32 = 190;
 pub const SCREEN_HEIGHT: u32 = 144;
@@ -113,7 +119,7 @@ impl Default for Tile {
 }
 
 impl Tile {
-    fn from_data(data: &[u8], palette: &background_palette::BackgroundPalette) -> Self {
+    fn from_data(data: &[u8], palette: &[Rgba]) -> Self {
         let mut tile = Self::default();
 
         // Tile data is represented as 2 bytes per line
@@ -125,28 +131,20 @@ impl Tile {
                 let lsb = line[1] >> shift & 0b1;
                 let color_id = (msb << 1u16) + lsb;
 
-                let shade = match color_id {
-                    0 => palette.color_0(),
-                    1 => palette.color_1(),
-                    2 => palette.color_2(),
-                    3 => palette.color_3(),
-                    _ => panic!("Tile color id out of range"),
-                };
-
-                tile.pixels[y][x] = shade_to_rgba(shade);
-            }
-        }
-
-        fn shade_to_rgba(shade: GrayShade) -> Rgba {
-            match shade {
-                GrayShade::Black => Rgba::black(),
-                GrayShade::DarkGray => Rgba::dark(),
-                GrayShade::LightGray => Rgba::light(),
-                GrayShade::White => Rgba::white(),
+                tile.pixels[y][x] = palette[color_id as usize];
             }
         }
 
         tile
+    }
+
+    pub fn shade_to_rgba(shade: GrayShade) -> Rgba {
+        match shade {
+            GrayShade::Black => Rgba::black(),
+            GrayShade::DarkGray => Rgba::dark(),
+            GrayShade::LightGray => Rgba::light(),
+            GrayShade::White => Rgba::white(),
+        }
     }
 }
 
@@ -158,7 +156,8 @@ pub struct PpuState {
     pub ly: u8,
     pub lyc: u8,
     pub viewport: (u8, u8),
-    pub tile_list: Vec<Tile>,
+    pub bg_win_tiles: Vec<Tile>,
+    pub obj_tiles: Vec<Tile>,
 }
 
 pub struct PPU {
@@ -171,7 +170,8 @@ pub struct PPU {
     viewport: (u8, u8),
     screen_buffer: Vec<u8>,
     render_buffer: Vec<u8>,
-    tile_list: Vec<Tile>,
+    bg_win_tiles: Vec<Tile>,
+    obj_tiles: Vec<Tile>,
     tile_list_updated: bool,
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
     dots: u16,
@@ -189,7 +189,8 @@ impl PPU {
             viewport: (0, 0),
             screen_buffer: vec![0; SCREEN_SIZE],
             render_buffer: vec![0; RENDER_FRAME_SIZE],
-            tile_list: vec![Tile::default(); 3 * TILE_BLOCK_SIZE],
+            bg_win_tiles: vec![Tile::default(); 2 * TILE_BLOCK_SIZE],
+            obj_tiles: vec![Tile::default(); 2 * TILE_BLOCK_SIZE],
             tile_list_updated: false,
             render_ch: flume::bounded(1),
             dots: 0,
@@ -305,24 +306,58 @@ impl PPU {
     }
 
     fn update_tile_list(&mut self) -> Result<(), GbError> {
-        let mut tile_addr = 0;
+        let palette = [
+            Tile::shade_to_rgba(self.bg_palette.color_0()),
+            Tile::shade_to_rgba(self.bg_palette.color_1()),
+            Tile::shade_to_rgba(self.bg_palette.color_2()),
+            Tile::shade_to_rgba(self.bg_palette.color_3()),
+        ];
 
-        let mut tile_index = 0usize;
-        while tile_addr < TILE_DATA_END {
-            let mut tile_data = [0u8; TILE_DATA_SIZE];
-
-            for chunk in tile_data.chunks_exact_mut(2) {
-                chunk.copy_from_slice(&self.read_word(tile_addr as u16)?.to_be_bytes());
-                tile_addr += 2;
-            }
-
-            self.tile_list[tile_index] = Tile::from_data(&tile_data, &self.bg_palette);
-            tile_index += 1;
+        if self.lcd_control.bg_and_window_tile_area_sel {
+            PPU::parse_tiles(
+                &self.vram,
+                TILE_BLOCK0_START as usize,
+                TILE_BLOCK1_END as usize,
+                &palette,
+                &mut self.bg_win_tiles,
+            );
+        } else {
+            PPU::parse_tiles(
+                &self.vram,
+                TILE_BLOCK2_START as usize,
+                TILE_BLOCK2_END as usize,
+                &palette,
+                &mut self.bg_win_tiles,
+            );
+            PPU::parse_tiles(
+                &self.vram,
+                TILE_BLOCK1_START as usize,
+                TILE_BLOCK1_END as usize,
+                &palette,
+                &mut self.bg_win_tiles[128..],
+            );
         }
 
         self.tile_list_updated = true;
 
         Ok(())
+    }
+
+    fn parse_tiles(
+        vram: &[u8],
+        start_addr: usize,
+        end_addr: usize,
+        palette: &[Rgba],
+        dst: &mut [Tile],
+    ) {
+        let mut tile_index = 0;
+        let mut addr = start_addr;
+        while addr <= end_addr {
+            dst[tile_index] = Tile::from_data(&vram[addr..addr + TILE_DATA_SIZE], &palette);
+            tile_index += 1;
+            addr += TILE_DATA_SIZE;
+        }
+        log::info!("last index {}, addr {}", tile_index, addr);
     }
 
     pub fn state(&self) -> PpuState {
@@ -333,7 +368,8 @@ impl PPU {
             ly: self.ly,
             lyc: self.lyc,
             viewport: self.viewport,
-            tile_list: self.tile_list.clone(),
+            bg_win_tiles: self.bg_win_tiles.clone(),
+            obj_tiles: self.obj_tiles.clone(),
         }
     }
 }
