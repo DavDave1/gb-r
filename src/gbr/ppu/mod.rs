@@ -1,23 +1,22 @@
+pub mod background_palette;
+pub mod lcd_control_register;
+pub mod lcd_status_register;
+
 use byteorder::{ByteOrder, LittleEndian};
 
-use crate::gbr::io_registers::background_palette::GrayShade;
-
-use super::{
-    io_registers::{
-        background_palette,
-        lcd_control_register::LcdControlRegister,
-        lcd_status_register::{LcsStatusRegister, ScreenMode},
-    },
-    memory_map::VIDEO_RAM_SIZE,
-    GbError,
+use self::{
+    background_palette::{BackgroundPalette, GrayShade},
+    lcd_control_register::LcdControlRegister,
+    lcd_status_register::{LcsStatusRegister, ScreenMode},
 };
+use crate::gbr::{memory_map::VIDEO_RAM_SIZE, GbError};
 
 // rlative to VRAM base addr
 const TILE_BLOCK0_START: u16 = 0x0000;
 const TILE_BLOCK0_END: u16 = 0x07FF;
 const TILE_BLOCK1_START: u16 = TILE_BLOCK0_END + 1;
 const TILE_BLOCK1_END: u16 = 0x0FFF;
-const TILE_BLOCK2_START: u16 = TILE_BLOCK1_END + 1;
+const TILE_BLOCK2_START: u16 = TILE_BLOCK1_END + 2;
 const TILE_BLOCK2_END: u16 = 0x17FF;
 
 pub const SCREEN_WIDTH: u32 = 190;
@@ -152,7 +151,7 @@ impl Tile {
 pub struct PpuState {
     pub lcd_control: LcdControlRegister,
     pub lcd_status: LcsStatusRegister,
-    pub bg_palette: background_palette::BackgroundPalette,
+    pub bg_palette: BackgroundPalette,
     pub ly: u8,
     pub lyc: u8,
     pub viewport: (u8, u8),
@@ -164,7 +163,7 @@ pub struct PPU {
     vram: Box<[u8]>,
     lcd_control: LcdControlRegister,
     lcd_status: LcsStatusRegister,
-    bg_palette: background_palette::BackgroundPalette,
+    bg_palette: BackgroundPalette,
     ly: u8,
     lyc: u8,
     viewport: (u8, u8),

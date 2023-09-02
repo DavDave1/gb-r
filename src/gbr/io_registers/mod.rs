@@ -1,7 +1,3 @@
-pub mod background_palette;
-pub mod lcd_control_register;
-pub mod lcd_status_register;
-
 use crate::gbr::memory_map::*;
 
 use super::GbError;
