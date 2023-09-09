@@ -3,7 +3,7 @@ use image::{GenericImage, RgbaImage};
 
 use crate::gbr::ppu::{TileList, TILE_HEIGHT, TILE_WIDTH};
 
-const TILE_PER_ROW: usize = 32;
+const TILE_PER_ROW: usize = 16;
 
 // TODO: replace usage if image library with handmade
 // tilemap to frame generator
