@@ -1,6 +1,5 @@
 use crate::gbr::GbError;
 
-pub const MEMORY_SIZE: usize = 0x10000;
 pub const BOOT_ROM_SIZE: usize = 0x100;
 
 const ROM_BANK0_START: u16 = 0x0000;

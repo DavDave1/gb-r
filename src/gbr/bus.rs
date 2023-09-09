@@ -73,20 +73,20 @@ impl Bus {
                     Ok(self.cart_rom[addr as usize])
                 }
             }
-            MappedAddress::RomActiveBank(addr) => Err(GbError::Unimplemented(
+            MappedAddress::RomActiveBank(_addr) => Err(GbError::Unimplemented(
                 "reading from cart active bank".into(),
             )),
             MappedAddress::VideoRam(addr) => self.ppu.read_byte(addr),
-            MappedAddress::ExternalRam(addr) => {
+            MappedAddress::ExternalRam(_addr) => {
                 Err(GbError::Unimplemented("reading from external ram".into()))
             }
-            MappedAddress::WorkRamBank0(addr) => Err(GbError::Unimplemented(
+            MappedAddress::WorkRamBank0(_addr) => Err(GbError::Unimplemented(
                 "reading from work ram bank 0".into(),
             )),
-            MappedAddress::WorkRamActiveBank(addr) => Err(GbError::Unimplemented(
+            MappedAddress::WorkRamActiveBank(_addr) => Err(GbError::Unimplemented(
                 "reading from work ram active bank".into(),
             )),
-            MappedAddress::SpriteAttributeTable(addr) => Err(GbError::Unimplemented(
+            MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
             MappedAddress::IORegisters(addr) => match addr {
@@ -102,21 +102,21 @@ impl Bus {
 
     pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match map_address(addr)? {
-            MappedAddress::RomBank0(addr) => Err(GbError::IllegalOp("write to rom bank 0".into())),
-            MappedAddress::RomActiveBank(addr) => {
+            MappedAddress::RomBank0(_addr) => Err(GbError::IllegalOp("write to rom bank 0".into())),
+            MappedAddress::RomActiveBank(_addr) => {
                 Err(GbError::IllegalOp("write to rom active bank".into()))
             }
             MappedAddress::VideoRam(addr) => self.ppu.write_byte(addr, value),
-            MappedAddress::ExternalRam(addr) => {
+            MappedAddress::ExternalRam(_addr) => {
                 Err(GbError::Unimplemented("writing to external ram".into()))
             }
-            MappedAddress::WorkRamBank0(addr) => {
+            MappedAddress::WorkRamBank0(_addr) => {
                 Err(GbError::Unimplemented("writing to work ram 0".into()))
             }
-            MappedAddress::WorkRamActiveBank(addr) => Err(GbError::Unimplemented(
+            MappedAddress::WorkRamActiveBank(_addr) => Err(GbError::Unimplemented(
                 "writing to work ram active bank".into(),
             )),
-            MappedAddress::SpriteAttributeTable(addr) => Err(GbError::Unimplemented(
+            MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "writing to sprite attribute table".into(),
             )),
             MappedAddress::IORegisters(addr) => match addr {
@@ -142,23 +142,23 @@ impl Bus {
                     Err(GbError::Unimplemented("reading from cart bank 0".into()))
                 }
             }
-            MappedAddress::RomActiveBank(addr) => Err(GbError::Unimplemented(
+            MappedAddress::RomActiveBank(_addr) => Err(GbError::Unimplemented(
                 "reading from cart active bank".into(),
             )),
             MappedAddress::VideoRam(addr) => self.ppu.read_word(addr),
-            MappedAddress::ExternalRam(addr) => {
+            MappedAddress::ExternalRam(_addr) => {
                 Err(GbError::Unimplemented("reading from external ram".into()))
             }
-            MappedAddress::WorkRamBank0(addr) => {
+            MappedAddress::WorkRamBank0(_addr) => {
                 Err(GbError::Unimplemented("reading from work ram 0".into()))
             }
-            MappedAddress::WorkRamActiveBank(addr) => Err(GbError::Unimplemented(
+            MappedAddress::WorkRamActiveBank(_addr) => Err(GbError::Unimplemented(
                 "reading from work ram active bank".into(),
             )),
-            MappedAddress::SpriteAttributeTable(addr) => Err(GbError::Unimplemented(
+            MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
-            MappedAddress::IORegisters(addr) => {
+            MappedAddress::IORegisters(_addr) => {
                 Err(GbError::Unimplemented("reading IO registers".into()))
             }
             MappedAddress::HighRam(addr) => Ok(LittleEndian::read_u16(&self.hram[addr as usize..])),

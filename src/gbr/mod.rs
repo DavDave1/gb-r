@@ -12,8 +12,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum GbError {
-    #[error("Failed to decode instruction")]
-    Decode,
     #[error("Unknown instruction {0:#04X}")]
     UnknownInstruction(u8),
     #[error("Unknown cb instruction {0:#04X}")]
