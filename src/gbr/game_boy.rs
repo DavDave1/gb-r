@@ -15,12 +15,10 @@ impl GameBoy {
         }
     }
 
-    pub fn step(&mut self) -> Result<(), GbError> {
+    pub fn step(&mut self) -> Result<bool, GbError> {
         let cycles = self.cpu.step(&mut self.bus)?;
 
-        self.bus.ppu_mut().step(cycles)?;
-
-        Ok(())
+        self.bus.ppu_mut().step(cycles)
     }
 
     pub fn reset(&mut self) {}

@@ -1,6 +1,7 @@
 pub mod background_palette;
 pub mod lcd_control_register;
 pub mod lcd_status_register;
+pub mod pixel_processor;
 
 use byteorder::{ByteOrder, LittleEndian};
 
@@ -8,6 +9,7 @@ use self::{
     background_palette::{BackgroundPalette, GrayShade},
     lcd_control_register::LcdControlRegister,
     lcd_status_register::{LcsStatusRegister, ScreenMode},
+    pixel_processor::PixelProcessor,
 };
 use crate::gbr::{memory_map::VIDEO_RAM_SIZE, GbError};
 
@@ -19,28 +21,19 @@ const TILE_BLOCK1_END: u16 = 0x0FFF;
 const TILE_BLOCK2_START: u16 = TILE_BLOCK1_END + 2;
 const TILE_BLOCK2_END: u16 = 0x17FF;
 
-pub const SCREEN_WIDTH: u32 = 190;
+pub const SCREEN_WIDTH: u32 = 160;
 pub const SCREEN_HEIGHT: u32 = 144;
-pub const NUM_CHANNELS: u32 = 4; // rgba
-pub const SCREEN_SIZE: usize = (SCREEN_WIDTH * SCREEN_HEIGHT * NUM_CHANNELS) as usize;
-
-const RENDER_FRAME_WIDTH: u32 = 256;
-const RENDER_FRAME_HEIGHT: u32 = 256;
-const RENDER_FRAME_SIZE: usize = (RENDER_FRAME_WIDTH * RENDER_FRAME_HEIGHT * NUM_CHANNELS) as usize;
 
 pub const TILE_WIDTH: u32 = 8;
 pub const TILE_HEIGHT: u32 = 8;
-const TILE_RENDER_SIZE: usize = (TILE_WIDTH * TILE_HEIGHT * NUM_CHANNELS) as usize;
 const TILE_DATA_SIZE: usize = 16;
 
 pub const TILE_BLOCK_SIZE: usize = 128;
 
-const VBLANK_LINE: u8 = 145;
+const VBLANK_LINE: u8 = 144;
 const LAST_LINE: u8 = 153;
 
 const MODE_2_DOTS: u16 = 80;
-const MODE_3_DOTS: u16 = 172;
-const MODE_0_DOTS: u16 = 204;
 
 const DOTS_PER_LINE: u16 = 456;
 
@@ -49,58 +42,38 @@ pub type TileList = Vec<Tile>;
 
 #[derive(Clone, Copy)]
 pub struct Rgba {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
+    pub rgba: [u8; 4],
 }
 
 impl Rgba {
     pub fn black() -> Self {
         Self {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
+            rgba: [0, 0, 0, 255],
         }
     }
 
     pub fn dark() -> Self {
         Self {
-            r: 84,
-            g: 84,
-            b: 84,
-            a: 255,
+            rgba: [84, 84, 84, 255],
         }
     }
 
     pub fn light() -> Self {
         Self {
-            r: 168,
-            g: 168,
-            b: 168,
-            a: 255,
+            rgba: [168, 168, 168, 255],
         }
     }
 
     pub fn white() -> Self {
         Self {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
+            rgba: [255, 255, 255, 255],
         }
     }
 }
 
 impl Default for Rgba {
     fn default() -> Self {
-        Self {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 0,
-        }
+        Self { rgba: [0; 4] }
     }
 }
 
@@ -167,13 +140,12 @@ pub struct PPU {
     ly: u8,
     lyc: u8,
     viewport: (u8, u8),
-    screen_buffer: Vec<u8>,
-    render_buffer: Vec<u8>,
     bg_win_tiles: Vec<Tile>,
     obj_tiles: Vec<Tile>,
     tile_list_updated: bool,
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
     dots: u16,
+    pixel_processor: PixelProcessor,
 }
 
 impl PPU {
@@ -186,19 +158,18 @@ impl PPU {
             ly: 0,
             lyc: 0,
             viewport: (0, 0),
-            screen_buffer: vec![0; SCREEN_SIZE],
-            render_buffer: vec![0; RENDER_FRAME_SIZE],
             bg_win_tiles: vec![Tile::default(); 2 * TILE_BLOCK_SIZE],
             obj_tiles: vec![Tile::default(); 2 * TILE_BLOCK_SIZE],
             tile_list_updated: false,
             render_ch: flume::bounded(1),
             dots: 0,
+            pixel_processor: PixelProcessor::new(),
         }
     }
 
-    pub fn step(&mut self, cpu_cycles: u8) -> Result<(), GbError> {
+    pub fn step(&mut self, cpu_cycles: u8) -> Result<bool, GbError> {
         if !self.lcd_control.display_enable {
-            return Ok(());
+            return Ok(false);
         }
 
         self.dots += cpu_cycles as u16;
@@ -209,21 +180,40 @@ impl PPU {
             self.dots -= DOTS_PER_LINE;
         }
 
+        let mut vblank_ev = false;
         if self.ly > LAST_LINE {
             self.render()?;
             self.ly = 0;
+            vblank_ev = true;
         } else if self.ly >= VBLANK_LINE {
             self.lcd_status.mode = ScreenMode::VBlank;
-        } else if self.dots <= MODE_0_DOTS {
+        } else if self.dots <= MODE_2_DOTS {
             self.lcd_status.mode = ScreenMode::SreachingOAM;
             self.update_tile_list()?;
-        } else if self.dots <= MODE_3_DOTS {
+        } else if self.lcd_status.mode != ScreenMode::TransferringData {
+            self.pixel_processor.start(
+                self.ly,
+                self.dots,
+                &self.viewport,
+                &self.lcd_control,
+                &self.vram,
+                &self.bg_palette,
+            );
             self.lcd_status.mode = ScreenMode::TransferringData;
-        } else {
+        } else if self.pixel_processor.finished() {
             self.lcd_status.mode = ScreenMode::HBlank;
+        } else {
+            self.pixel_processor.process(
+                self.ly,
+                self.dots,
+                &self.viewport,
+                &self.lcd_control,
+                &self.vram,
+                &self.bg_palette,
+            );
         }
 
-        Ok(())
+        Ok(vblank_ev)
     }
 
     pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
@@ -299,8 +289,12 @@ impl PPU {
     }
 
     pub fn render(&mut self) -> Result<(), GbError> {
-        self.render_ch.0.try_send(self.screen_buffer.clone()).ok();
+        self.render_ch
+            .0
+            .try_send(self.pixel_processor.screen_buffer.clone())
+            .ok();
         self.tile_list_updated = false;
+        self.pixel_processor.screen_buffer.fill(0);
         Ok(())
     }
 

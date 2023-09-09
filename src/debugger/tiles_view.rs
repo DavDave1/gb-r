@@ -22,16 +22,7 @@ fn create_image(tiles: &TileList) -> ColorImage {
 
         for r in 0..TILE_WIDTH as usize {
             for c in 0..TILE_HEIGHT as usize {
-                tile_region.put_pixel(
-                    r as u32,
-                    c as u32,
-                    image::Rgba([
-                        tile.pixels[r][c].r,
-                        tile.pixels[r][c].g,
-                        tile.pixels[r][c].b,
-                        tile.pixels[r][c].a,
-                    ]),
-                );
+                tile_region.put_pixel(r as u32, c as u32, image::Rgba(tile.pixels[r][c].rgba));
             }
         }
     }

@@ -1,3 +1,5 @@
+use super::Rgba;
+
 #[derive(Copy, Clone)]
 pub enum GrayShade {
     White,
@@ -13,6 +15,14 @@ impl GrayShade {
             GrayShade::LightGray => 177u8 as char,
             GrayShade::DarkGray => 178u8 as char,
             GrayShade::Black => 219u8 as char,
+        }
+    }
+    pub fn to_rgba(&self) -> Rgba {
+        match self {
+            GrayShade::Black => Rgba::black(),
+            GrayShade::DarkGray => Rgba::dark(),
+            GrayShade::LightGray => Rgba::light(),
+            GrayShade::White => Rgba::white(),
         }
     }
 }
@@ -42,37 +52,35 @@ impl From<GrayShade> for u8 {
 
 #[derive(Copy, Clone)]
 pub struct BackgroundPalette {
-    color_0: GrayShade,
-    color_1: GrayShade,
-    color_2: GrayShade,
-    color_3: GrayShade,
+    palette: [GrayShade; 4],
 }
 
 impl BackgroundPalette {
     pub fn color_0(&self) -> GrayShade {
-        self.color_0
+        self.palette[0]
     }
 
     pub fn color_1(&self) -> GrayShade {
-        self.color_1
+        self.palette[1]
     }
 
     pub fn color_2(&self) -> GrayShade {
-        self.color_2
+        self.palette[2]
     }
 
     pub fn color_3(&self) -> GrayShade {
-        self.color_3
+        self.palette[3]
+    }
+
+    pub fn to_rgba(&self, color_id: u8) -> Rgba {
+        self.palette[color_id as usize].to_rgba()
     }
 }
 
 impl Default for BackgroundPalette {
     fn default() -> Self {
         BackgroundPalette {
-            color_0: GrayShade::White,
-            color_1: GrayShade::White,
-            color_2: GrayShade::White,
-            color_3: GrayShade::White,
+            palette: [GrayShade::White; 4],
         }
     }
 }
@@ -81,19 +89,21 @@ impl From<u8> for BackgroundPalette {
     fn from(value: u8) -> Self {
         let mask: u8 = 0b0000011;
         BackgroundPalette {
-            color_0: GrayShade::from(value & mask),
-            color_1: GrayShade::from(value >> 2 & mask),
-            color_2: GrayShade::from(value >> 4 & mask),
-            color_3: GrayShade::from(value >> 6 & mask),
+            palette: [
+                GrayShade::from(value & mask),
+                GrayShade::from(value >> 2 & mask),
+                GrayShade::from(value >> 4 & mask),
+                GrayShade::from(value >> 6 & mask),
+            ],
         }
     }
 }
 
 impl From<BackgroundPalette> for u8 {
     fn from(value: BackgroundPalette) -> Self {
-        value.color_0 as u8
-            | (value.color_1 as u8) << 2
-            | (value.color_2 as u8) << 4
-            | (value.color_3 as u8) << 6
+        value.palette[0] as u8
+            | (value.palette[1] as u8) << 2
+            | (value.palette[2] as u8) << 4
+            | (value.palette[3] as u8) << 6
     }
 }

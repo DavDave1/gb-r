@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum ScreenMode {
     HBlank,
     VBlank,

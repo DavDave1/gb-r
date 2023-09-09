@@ -4,6 +4,7 @@ use std::{
         mpsc::{channel, Sender},
         Arc, RwLock,
     },
+    time::{Duration, SystemTime},
 };
 
 use crate::gbr::game_boy::GameBoy;
@@ -12,6 +13,8 @@ use crate::gbr::{cpu::CpuState, ppu::ScreenBuffer};
 use crate::gbr::{instruction::Instruction, ppu::PpuState};
 
 pub type AsmState = Vec<(u16, Option<Instruction>)>;
+
+const FRAME_TIME: Duration = Duration::from_millis(166);
 
 pub enum DebuggerCommand {
     Run,
@@ -84,6 +87,7 @@ impl Debugger {
 
             let mut breakpoints = HashSet::<u16>::new();
 
+            let mut now = SystemTime::now();
             loop {
                 if let Ok(mut state) = state.try_write() {
                     state.cpu = emu.cpu().state();
@@ -121,18 +125,31 @@ impl Debugger {
                     None => (),
                 }
 
+                let mut vblank_ev = false;
                 if running || stepping {
                     stepping = false;
 
-                    if let Err(e) = emu.step() {
-                        log::error!("emu error: {}", e);
-                        emu_state_sig.try_send(EmuState::Error).ok();
-                        break;
-                    }
+                    vblank_ev = match emu.step() {
+                        Err(e) => {
+                            log::error!("emu error: {}", e);
+                            emu_state_sig.try_send(EmuState::Error).ok();
+                            break;
+                        }
+                        Ok(ev) => ev,
+                    };
                 }
 
                 if breakpoints.contains(&emu.cpu().read_pc()) {
                     running = false;
+                }
+
+                if running && vblank_ev {
+                    let elapsed = SystemTime::now().duration_since(now).unwrap();
+                    now = SystemTime::now();
+
+                    if elapsed < FRAME_TIME {
+                        std::thread::sleep(FRAME_TIME - elapsed);
+                    }
                 }
             }
         });
