@@ -1,0 +1,47 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'gb-r'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=gb-r",
+                    "--package=gb-r"
+                ],
+                "filter": {
+                    "name": "gb-r",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "./Data/DMG_ROM.bin"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'gb-r'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=gb-r",
+                    "--package=gb-r"
+                ],
+                "filter": {
+                    "name": "gb-r",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
