@@ -23,6 +23,7 @@ pub enum DebuggerCommand {
     Step,
     SetBreakpoint(u16),
     UnsetBreakpoint(u16),
+    DumpVram,
 }
 
 pub enum EmuState {
@@ -122,6 +123,7 @@ impl Debugger {
                         breakpoints.remove(&pc);
                     }
                     Some(DebuggerCommand::Step) => stepping = true,
+                    Some(DebuggerCommand::DumpVram) => log::info!("\n{}", emu.ppu().vram_dump()),
                     None => (),
                 }
 

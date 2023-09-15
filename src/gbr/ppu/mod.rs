@@ -310,4 +310,25 @@ impl PPU {
             obj_tiles: self.obj_tiles.clone(),
         }
     }
+
+    pub fn vram_dump(&self) -> String {
+        const BYTES_PER_LINE: usize = 32;
+
+        let mut dump = "".to_string();
+        for (addr, data) in self.vram.chunks_exact(BYTES_PER_LINE).enumerate() {
+            dump.push_str(&format!(
+                "{:#06X}: ",
+                VIDEO_RAM_START as usize + addr * BYTES_PER_LINE
+            ));
+
+            for b in 0..BYTES_PER_LINE {
+                dump.push_str(&format!("{:02X} ", data[b]));
+            }
+
+            dump.pop();
+            dump.push('\n');
+        }
+
+        dump
+    }
 }

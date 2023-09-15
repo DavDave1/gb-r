@@ -102,6 +102,10 @@ impl UiState {
                             self.debugger.send_cmd(DebuggerCommand::Stop).unwrap();
                         }
                     }
+
+                    if ui.button("Dump VRAM").clicked() {
+                        self.debugger.send_cmd(DebuggerCommand::DumpVram).unwrap();
+                    }
                 });
             });
 
