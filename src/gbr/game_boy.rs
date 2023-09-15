@@ -23,7 +23,10 @@ impl GameBoy {
         self.bus.ppu_mut().step(cycles)
     }
 
-    pub fn reset(&mut self) {}
+    pub fn reset(&mut self) {
+        self.cpu = CPU::new();
+        self.bus.reset();
+    }
 
     pub fn cpu(&self) -> &CPU {
         &self.cpu

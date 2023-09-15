@@ -102,6 +102,21 @@ impl PPU {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.vram.fill(0);
+        self.lcd_control = LcdControlRegister::default();
+        self.lcd_status = LcsStatusRegister::default();
+        self.bg_palette = Default::default();
+        self.ly = 0;
+        self.lyc = 0;
+        self.viewport = (0, 0);
+        self.bg_win_tiles.fill(Tile::default());
+        self.obj_tiles.fill(Tile::default());
+        self.tile_list_updated = false;
+        self.dots = 0;
+        self.pixel_processor = PixelProcessor::new();
+    }
+
     pub fn step(&mut self, cpu_cycles: u8) -> Result<bool, GbError> {
         if !self.lcd_control.display_enable {
             return Ok(false);

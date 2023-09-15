@@ -44,6 +44,11 @@ impl Bus {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.ppu.reset();
+        self.io_registers = IORegisters::default();
+    }
+
     pub fn ppu(&self) -> &PPU {
         &self.ppu
     }
