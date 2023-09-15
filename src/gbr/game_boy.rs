@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::gbr::{bus::Bus, cpu::CPU, ppu::PPU, GbError};
 
 pub struct GameBoy {
@@ -6,7 +8,7 @@ pub struct GameBoy {
 }
 
 impl GameBoy {
-    pub fn new(boot_rom_filename: &std::path::Path, cart_rom_filename: &std::path::Path) -> Self {
+    pub fn new(boot_rom_filename: Option<PathBuf>, cart_rom_filename: Option<PathBuf>) -> Self {
         let bus = Bus::new(boot_rom_filename, cart_rom_filename);
 
         GameBoy {

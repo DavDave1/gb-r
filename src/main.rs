@@ -1,7 +1,10 @@
 #[macro_use]
 extern crate enum_primitive;
 
-use std::path::Path;
+#[macro_use]
+extern crate lazy_static;
+
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 mod debugger;
@@ -11,12 +14,12 @@ use debugger::debugger_app::DebuggerApp;
 use gbr::game_boy::GameBoy;
 
 fn main() {
-    let boot_rom_filename = std::env::args().nth(1).unwrap();
-    let cart_rom_filename = std::env::args().nth(2).unwrap();
+    let boot_rom_filename = std::env::args().nth(1).and_then(|p| Some(PathBuf::from(p)));
+    let cart_rom_filename = std::env::args().nth(2).and_then(|p| Some(PathBuf::from(p)));
 
     let gb_emu = Arc::new(RwLock::new(GameBoy::new(
-        Path::new(&boot_rom_filename),
-        Path::new(&cart_rom_filename),
+        boot_rom_filename,
+        cart_rom_filename,
     )));
     DebuggerApp::run(gb_emu);
 }

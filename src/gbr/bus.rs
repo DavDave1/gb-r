@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::PathBuf};
 
 use byteorder::{ByteOrder, LittleEndian};
 
@@ -16,14 +16,23 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn new(boot_rom_filename: &std::path::Path, cart_rom_filename: &std::path::Path) -> Self {
+    pub fn new(boot_rom_filename: Option<PathBuf>, cart_rom_filename: Option<PathBuf>) -> Self {
+        let boot_rom_filename = boot_rom_filename.expect("Boot rom path not provided");
         let boot_rom = fs::read(boot_rom_filename).expect("Failed to read boot rom");
 
         if boot_rom.len() != BOOT_ROM_SIZE {
             panic!("Wrong boot rom size");
         }
 
-        let cart_rom = fs::read(cart_rom_filename).expect("Failed to read catridge rom");
+        let cart_rom = match cart_rom_filename {
+            Some(path) => fs::read(path)
+                .map_err(|err| {
+                    log::error!("Failed to read cart ROM: {}", err);
+                    Vec::<u8>::new()
+                })
+                .unwrap(),
+            None => vec![],
+        };
 
         Bus {
             boot_rom_lock: true,
@@ -69,8 +78,10 @@ impl Bus {
             MappedAddress::RomBank0(addr) => {
                 if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
                     Ok(self.boot_rom[addr as usize])
-                } else {
+                } else if !self.cart_rom.is_empty() {
                     Ok(self.cart_rom[addr as usize])
+                } else {
+                    Ok(0xFF)
                 }
             }
             MappedAddress::RomActiveBank(_addr) => Err(GbError::Unimplemented(
