@@ -1,7 +1,9 @@
 pub mod background_palette;
 pub mod lcd_control_register;
 pub mod lcd_status_register;
+pub mod pixel;
 pub mod pixel_processor;
+pub mod tile;
 
 use byteorder::{ByteOrder, LittleEndian};
 
@@ -9,7 +11,9 @@ use self::{
     background_palette::{BackgroundPalette, GrayShade},
     lcd_control_register::LcdControlRegister,
     lcd_status_register::{LcsStatusRegister, ScreenMode},
+    pixel::Rgba,
     pixel_processor::PixelProcessor,
+    tile::Tile,
 };
 use crate::gbr::{memory_map::VIDEO_RAM_SIZE, GbError};
 
@@ -40,87 +44,7 @@ const DOTS_PER_LINE: u16 = 456;
 pub type ScreenBuffer = Vec<u8>;
 pub type TileList = Vec<Tile>;
 
-#[derive(Clone, Copy)]
-pub struct Rgba {
-    pub rgba: [u8; 4],
-}
-
-impl Rgba {
-    pub fn black() -> Self {
-        Self {
-            rgba: [0, 0, 0, 255],
-        }
-    }
-
-    pub fn dark() -> Self {
-        Self {
-            rgba: [84, 84, 84, 255],
-        }
-    }
-
-    pub fn light() -> Self {
-        Self {
-            rgba: [168, 168, 168, 255],
-        }
-    }
-
-    pub fn white() -> Self {
-        Self {
-            rgba: [255, 255, 255, 255],
-        }
-    }
-}
-
-impl Default for Rgba {
-    fn default() -> Self {
-        Self { rgba: [0; 4] }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct Tile {
-    pub pixels: [[Rgba; TILE_WIDTH as usize]; TILE_HEIGHT as usize],
-}
-
-impl Default for Tile {
-    fn default() -> Self {
-        Self {
-            pixels: [[Rgba::white(); TILE_WIDTH as usize]; TILE_HEIGHT as usize],
-        }
-    }
-}
-
-impl Tile {
-    fn from_data(data: &[u8], palette: &[Rgba]) -> Self {
-        let mut tile = Self::default();
-
-        // Tile data is represented as 2 bytes per line
-        for (x, line) in data.chunks_exact(2).enumerate() {
-            for y in 0..8 {
-                let shift = 7 - y;
-
-                let msb = line[0] >> shift & 0b1;
-                let lsb = line[1] >> shift & 0b1;
-                let color_id = (msb << 1u16) + lsb;
-
-                tile.pixels[y][x] = palette[color_id as usize];
-            }
-        }
-
-        tile
-    }
-
-    pub fn shade_to_rgba(shade: GrayShade) -> Rgba {
-        match shade {
-            GrayShade::Black => Rgba::black(),
-            GrayShade::DarkGray => Rgba::dark(),
-            GrayShade::LightGray => Rgba::light(),
-            GrayShade::White => Rgba::white(),
-        }
-    }
-}
-
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PpuState {
     pub lcd_control: LcdControlRegister,
     pub lcd_status: LcsStatusRegister,
