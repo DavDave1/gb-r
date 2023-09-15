@@ -33,7 +33,7 @@ impl VideoDriver {
         let win_size = LogicalSize::new(self.width as f64, self.height as f64);
         let window = WindowBuilder::new()
             .with_title("gb-r")
-            .with_inner_size(win_size)
+            .with_maximized(true)
             .with_min_inner_size(win_size)
             .build(&event_loop)?;
 

@@ -14,8 +14,6 @@ use crate::gbr::{instruction::Instruction, ppu::PpuState};
 
 pub type AsmState = Vec<(u16, Option<Instruction>)>;
 
-const FRAME_TIME: Duration = Duration::from_millis(166);
-
 pub enum DebuggerCommand {
     Run,
     Stop,
@@ -32,7 +30,7 @@ pub enum EmuState {
     Error,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct GbState {
     pub cpu: CpuState,
     pub io_registers: IORegisters,
@@ -80,6 +78,9 @@ impl Debugger {
         let emu_state_sig = self.emu_state.0.clone();
 
         self.emu_state.0.try_send(EmuState::Running).ok();
+
+        let frame_time = Duration::from_secs_f64(1.0 / 59.7);
+
         std::thread::spawn(move || {
             let mut emu: std::sync::RwLockWriteGuard<'_, GameBoy> = emu.write().unwrap();
 
@@ -90,10 +91,18 @@ impl Debugger {
 
             let mut now = SystemTime::now();
             loop {
-                if let Ok(mut state) = state.try_write() {
-                    state.cpu = emu.cpu().state();
-                    state.io_registers = emu.bus().io_registers().clone();
-                    state.ppu = emu.bus().ppu().state();
+                if running {
+                    if let Ok(mut state) = state.try_write() {
+                        state.cpu = emu.cpu().state();
+                        state.io_registers = emu.bus().io_registers().clone();
+                        state.ppu = emu.bus().ppu().state();
+                    }
+                } else {
+                    if let Ok(mut state) = state.write() {
+                        state.cpu = emu.cpu().state();
+                        state.io_registers = emu.bus().io_registers().clone();
+                        state.ppu = emu.bus().ppu().state();
+                    }
                 }
 
                 let cmd = if !running {
@@ -135,7 +144,8 @@ impl Debugger {
                         Err(e) => {
                             log::error!("emu error: {}", e);
                             emu_state_sig.try_send(EmuState::Error).ok();
-                            break;
+                            running = false;
+                            false
                         }
                         Ok(ev) => ev,
                     };
@@ -149,8 +159,8 @@ impl Debugger {
                     let elapsed = SystemTime::now().duration_since(now).unwrap();
                     now = SystemTime::now();
 
-                    if elapsed < FRAME_TIME {
-                        std::thread::sleep(FRAME_TIME - elapsed);
+                    if elapsed < frame_time {
+                        std::thread::sleep(frame_time - elapsed);
                     }
                 }
             }

@@ -78,28 +78,30 @@ impl UiState {
         egui::TopBottomPanel::top("toolbar")
             .max_height(60.0)
             .show(ctx, |ui| {
-                ui.horizontal_top(|ui| match self.emu_state {
-                    EmuState::Running => {
-                        if ui.button("Stop").clicked() {
-                            self.debugger.send_cmd(DebuggerCommand::Stop).unwrap();
-                        }
+                ui.horizontal_top(|ui| {
+                    match self.emu_state {
+                        EmuState::Running => {
+                            if ui.button("Stop").clicked() {
+                                self.debugger.send_cmd(DebuggerCommand::Stop).unwrap();
+                            }
 
-                        if ui.button("Pause").clicked() {
-                            self.debugger.send_cmd(DebuggerCommand::Pause).unwrap();
+                            if ui.button("Pause").clicked() {
+                                self.debugger.send_cmd(DebuggerCommand::Pause).unwrap();
+                            }
                         }
-                    }
-                    EmuState::Idle => {
-                        if ui.button("Start").clicked() {
-                            self.debugger.send_cmd(DebuggerCommand::Run).unwrap();
-                        }
+                        EmuState::Idle => {
+                            if ui.button("Start").clicked() {
+                                self.debugger.send_cmd(DebuggerCommand::Run).unwrap();
+                            }
 
-                        if ui.button("Step").clicked() {
-                            self.debugger.send_cmd(DebuggerCommand::Step).unwrap();
+                            if ui.button("Step").clicked() {
+                                self.debugger.send_cmd(DebuggerCommand::Step).unwrap();
+                            }
                         }
-                    }
-                    EmuState::Error => {
-                        if ui.button("Stop").clicked() {
-                            self.debugger.send_cmd(DebuggerCommand::Stop).unwrap();
+                        EmuState::Error => {
+                            if ui.button("Stop").clicked() {
+                                self.debugger.send_cmd(DebuggerCommand::Stop).unwrap();
+                            }
                         }
                     }
 
@@ -109,7 +111,7 @@ impl UiState {
                 });
             });
 
-        let gb_state = self.debugger.gb_state.read().unwrap();
+        let gb_state = self.debugger.gb_state.read().unwrap().clone();
 
         egui::SidePanel::new(egui::panel::Side::Left, "ASM")
             .default_width(300.0)
