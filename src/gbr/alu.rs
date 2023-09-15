@@ -33,14 +33,21 @@ impl ALU {
 
                 ALU::cp(cpu, cpu.read_single_reg(dst), cmp_val);
             }
-            ArithmeticType::Rlc(reg) => {
+            ArithmeticType::RlC(reg, clear_z_flag) => {
                 let res = ALU::rlc(cpu, cpu.read_single_reg(reg));
                 cpu.write_single_reg(reg, res);
+
+                if *clear_z_flag {
+                    cpu.set_zero_flag(false);
+                }
             }
-            ArithmeticType::Rl(reg) => {
-                let res = ALU::rlc(cpu, cpu.read_single_reg(reg));
+            ArithmeticType::Rl(reg, clear_z_flag) => {
+                let res = ALU::rl(cpu, cpu.read_single_reg(reg));
                 cpu.write_single_reg(reg, res);
-                cpu.set_zero_flag(false); // investigate: why this special case?
+
+                if *clear_z_flag {
+                    cpu.set_zero_flag(false);
+                }
             }
             ArithmeticType::Sla(reg) => {
                 let res = ALU::sla(cpu, cpu.read_single_reg(reg));
@@ -59,7 +66,7 @@ impl ALU {
     pub fn dec(cpu: &mut CPU, value: u8) -> u8 {
         let result = value.wrapping_sub(1);
 
-        cpu.set_bcd_h_flag(value == 0x10);
+        cpu.set_bcd_h_flag(ALU::check_h_carry_sub(value as i16, -1));
         cpu.set_bcd_n_flag(true);
         cpu.set_zero_flag(result == 0);
 
@@ -69,7 +76,7 @@ impl ALU {
     pub fn inc(cpu: &mut CPU, value: u8) -> u8 {
         let result = value.wrapping_add(1);
 
-        cpu.set_bcd_h_flag(value == 0x0F);
+        cpu.set_bcd_h_flag(ALU::check_h_carry_sum(value, 1));
         cpu.set_bcd_n_flag(false);
         cpu.set_zero_flag(result == 0);
 
@@ -80,7 +87,7 @@ impl ALU {
         let result_ext = left as u16 + right as u16;
         let result = result_ext as u8;
 
-        cpu.set_bcd_h_flag(result & 0xF0 > left & 0xF0);
+        cpu.set_bcd_h_flag(ALU::check_h_carry_sum(left, right));
         cpu.set_bcd_n_flag(false);
         cpu.set_carry_flag(result_ext & 0xFF00 != 0);
         cpu.set_zero_flag(result == 0);
@@ -91,9 +98,9 @@ impl ALU {
     pub fn sub(cpu: &mut CPU, left: u8, right: u8) -> u8 {
         let result = left.wrapping_sub(right);
 
-        cpu.set_bcd_h_flag(result & 0xF0 < left & 0xF0);
+        cpu.set_bcd_h_flag(ALU::check_h_carry_sub(left as i16, right as i16));
         cpu.set_bcd_n_flag(true);
-        cpu.set_carry_flag(result > left);
+        cpu.set_carry_flag((left as i16 - right as i16) < 0);
         cpu.set_zero_flag(result == 0);
 
         result
@@ -110,14 +117,9 @@ impl ALU {
     }
 
     pub fn rlc(cpu: &mut CPU, value: u8) -> u8 {
-        let carry_in = cpu.get_carry_flag();
-        let carry_out = value & 0b10000000 != 0;
+        let carry_out = (value & 0b10000000) != 0;
 
-        let mut result = value.wrapping_shl(1);
-
-        if carry_in {
-            result = result | 0b00000001;
-        }
+        let result = value.rotate_left(1);
 
         cpu.set_bcd_h_flag(false);
         cpu.set_bcd_n_flag(false);
@@ -127,13 +129,29 @@ impl ALU {
         result
     }
 
-    pub fn sla(cpu: &mut CPU, value: u8) -> u8 {
-        let ext_result = (value as u16) << 1;
-        let result = ext_result as u8;
+    pub fn rl(cpu: &mut CPU, value: u8) -> u8 {
+        let will_carry = value & 0b10000000 != 0;
+
+        let mut result = value.wrapping_shl(1);
+
+        result = result | cpu.get_carry_flag() as u8;
 
         cpu.set_bcd_h_flag(false);
         cpu.set_bcd_n_flag(false);
-        cpu.set_carry_flag(ext_result & 0xFF00 != 0);
+        cpu.set_carry_flag(will_carry);
+        cpu.set_zero_flag(false);
+
+        result
+    }
+
+    pub fn sla(cpu: &mut CPU, value: u8) -> u8 {
+        let will_carry = value & 0b10000000 != 0;
+
+        let result = value.wrapping_shl(1);
+
+        cpu.set_bcd_h_flag(false);
+        cpu.set_bcd_n_flag(false);
+        cpu.set_carry_flag(will_carry);
         cpu.set_zero_flag(result == 0);
 
         result
@@ -149,5 +167,13 @@ impl ALU {
 
     pub fn cp(cpu: &mut CPU, left: u8, right: u8) {
         ALU::sub(cpu, left, right);
+    }
+
+    fn check_h_carry_sum(lv: u8, rv: u8) -> bool {
+        ((lv & 0xFF) + (rv & 0xFF)) > 0xF
+    }
+
+    fn check_h_carry_sub(lv: i16, rv: i16) -> bool {
+        ((lv & 0xFF) - (rv & 0xFF)) < 0
     }
 }

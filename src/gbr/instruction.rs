@@ -174,7 +174,7 @@ impl Opcode {
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 pub enum CbOpcode {
-    RlcC = 0x11,
+    RlC = 0x11,
     SlaB = 0x20,
     Bit7H = 0x7C,
 }
@@ -183,7 +183,7 @@ pub enum CbOpcode {
 impl CbOpcode {
     pub fn cycles(&self) -> u8 {
         match self {
-            Self::RlcC => 2,
+            Self::RlC => 2,
             Self::SlaB => 2,
             Self::Bit7H => 2,
         }
@@ -211,8 +211,8 @@ pub enum ArithmeticType {
     Add(SingleRegType, SingleRegType), // target, source
     Sub(SingleRegType, SingleRegType), // target, source
     Cmp(SingleRegType, CompareType),
-    Rl(SingleRegType),
-    Rlc(SingleRegType),
+    Rl(SingleRegType, bool),  // target, clear_z_flag
+    RlC(SingleRegType, bool), // target, clear_z_flag
     Sla(SingleRegType),
     Xor(SingleRegType, SingleRegType), // target, source
     TestBit(SingleRegType, u8),
@@ -227,8 +227,20 @@ impl Display for ArithmeticType {
             Self::Add(dest, src) => write!(f, "{} += {}", dest, src),
             Self::Sub(dest, src) => write!(f, "{} -= {}", dest, src),
             Self::Cmp(dest, src) => write!(f, "{} == {}", dest, src),
-            Self::Rl(reg) => write!(f, "Rl({})", reg),
-            Self::Rlc(reg) => write!(f, "Rlc({})", reg),
+            Self::Rl(reg, clear_z) => {
+                if *clear_z {
+                    write!(f, "Rl({}), Z=0", reg)
+                } else {
+                    write!(f, "Rl({})", reg)
+                }
+            }
+            Self::RlC(reg, clear_z) => {
+                if *clear_z {
+                    write!(f, "RlC({}), Z=0", reg)
+                } else {
+                    write!(f, "RlC({})", reg)
+                }
+            }
             Self::Sla(reg) => write!(f, "Sla({})", reg),
             Self::Xor(dest, src) => write!(f, "{} = {} ^ {}", dest, src, dest),
             Self::TestBit(reg, bit) => write!(f, "TestBit({}, {})", reg, bit),
@@ -292,6 +304,7 @@ impl Display for DestType {
     }
 }
 
+#[derive(PartialEq)]
 pub enum SingleRegType {
     A,
     B,
@@ -419,7 +432,7 @@ impl Instruction {
             Opcode::AddAB => Arithmetic(Add(A, B)),
             Opcode::SubAB => Arithmetic(Sub(A, B)),
             Opcode::SubAL => Arithmetic(Sub(A, L)),
-            Opcode::RlA => Arithmetic(Rl(A)),
+            Opcode::RlA => Arithmetic(Rl(A, true)),
             Opcode::XorA => Arithmetic(Xor(A, A)),
             Opcode::Cpd8 => Arithmetic(Cmp(A, CompareType::Imm(byte))),
             Opcode::Jr => JumpRelative(Always, byte as i8),
@@ -452,7 +465,7 @@ impl Instruction {
             Opcode::Ret => Ret,
             Opcode::Prefix => {
                 match CbOpcode::from_u8(byte).ok_or(GbError::UnknownCbInstruction(byte))? {
-                    CbOpcode::RlcC => Arithmetic(Rlc(C)),
+                    CbOpcode::RlC => Arithmetic(RlC(C, false)),
                     CbOpcode::SlaB => Arithmetic(Sla(B)),
                     CbOpcode::Bit7H => Arithmetic(TestBit(H, 7)),
                 }

@@ -9,7 +9,7 @@ use super::instruction::{
     SourceType,
 };
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct CpuState {
     pub af: u16,
     pub bc: u16,
@@ -296,8 +296,8 @@ impl CPU {
         Ok(())
     }
 
-    fn call(&mut self, bus: &mut Bus, instr_len: u16, call_mode: &CallMode) -> Result<(), GbError> {
-        self.push_stack(bus, self.reg_pc + instr_len)?;
+    fn call(&mut self, bus: &mut Bus, call_mode: &CallMode) -> Result<(), GbError> {
+        self.push_stack(bus, self.reg_pc)?;
 
         match call_mode {
             CallMode::Absolute(addr) => self.reg_pc = *addr,
@@ -332,7 +332,7 @@ impl CPU {
                 let value = self.pop_stack(bus)?;
                 self.write_double_reg(reg, value);
             }
-            InstructionType::Call(call_mode) => self.call(bus, instr.len() as u16, call_mode)?,
+            InstructionType::Call(call_mode) => self.call(bus, call_mode)?,
             InstructionType::Ret => self.reg_pc = self.pop_stack(bus)?,
         }
 
