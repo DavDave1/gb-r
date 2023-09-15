@@ -7,7 +7,7 @@ const ROM_BANK0_END: u16 = 0x3FFF;
 const ROM_ACTIVE_BANK_START: u16 = 0x4000;
 const ROM_ACTIVE_BANK_END: u16 = 0x7FFF;
 
-const VIDEO_RAM_START: u16 = 0x8000;
+pub const VIDEO_RAM_START: u16 = 0x8000;
 const VIDEO_RAM_END: u16 = 0x9FFF;
 pub const VIDEO_RAM_SIZE: usize = (VIDEO_RAM_END - VIDEO_RAM_START + 1) as usize;
 

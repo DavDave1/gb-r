@@ -15,7 +15,10 @@ use self::{
     pixel_processor::PixelProcessor,
     tile::Tile,
 };
-use crate::gbr::{memory_map::VIDEO_RAM_SIZE, GbError};
+use crate::gbr::{
+    memory_map::{VIDEO_RAM_SIZE, VIDEO_RAM_START},
+    GbError,
+};
 
 // rlative to VRAM base addr
 const TILE_BLOCK0_START: u16 = 0x0000;
@@ -24,6 +27,12 @@ const TILE_BLOCK1_START: u16 = TILE_BLOCK0_END + 1;
 const TILE_BLOCK1_END: u16 = 0x0FFF;
 const TILE_BLOCK2_START: u16 = TILE_BLOCK1_END + 2;
 const TILE_BLOCK2_END: u16 = 0x17FF;
+
+const TILEMAP_BLOCK0_START: u16 = 0x9800 - VIDEO_RAM_START;
+const TILEMAP_BLOCK0_END: u16 = 0x9BFF - VIDEO_RAM_START;
+
+const TILEMAP_BLOCK1_START: u16 = 0x9C00 - VIDEO_RAM_START;
+const TILEMAP_BLOCK1_END: u16 = 0x9FFF - VIDEO_RAM_START;
 
 pub const SCREEN_WIDTH: u32 = 160;
 pub const SCREEN_HEIGHT: u32 = 144;
@@ -38,6 +47,8 @@ const VBLANK_LINE: u8 = 144;
 const LAST_LINE: u8 = 153;
 
 const MODE_2_DOTS: u16 = 80;
+const MODE_3_DOTS_MIN: u16 = MODE_2_DOTS + 172;
+const MODE_3_DOTS_MAX: u16 = MODE_2_DOTS + 289;
 
 const DOTS_PER_LINE: u16 = 456;
 
@@ -99,6 +110,14 @@ impl PPU {
         self.dots += cpu_cycles as u16;
 
         if self.dots > DOTS_PER_LINE {
+            if self.lcd_status.mode != ScreenMode::HBlank
+                && self.lcd_status.mode != ScreenMode::VBlank
+            {
+                return Err(GbError::IllegalOp(format!(
+                    "unexpected mode {} during hblank",
+                    self.lcd_status.mode
+                )));
+            }
             self.ly += 1;
             self.lcd_status.lyc_equals_ly = self.lcd_status.lyc_check_enable && self.lyc == self.ly;
             self.dots -= DOTS_PER_LINE;
@@ -113,8 +132,8 @@ impl PPU {
             self.lcd_status.mode = ScreenMode::VBlank;
         } else if self.dots <= MODE_2_DOTS {
             self.lcd_status.mode = ScreenMode::SreachingOAM;
-            self.update_tile_list()?;
-        } else if self.lcd_status.mode != ScreenMode::TransferringData {
+            // self.update_tile_list()?;
+        } else if self.lcd_status.mode == ScreenMode::SreachingOAM {
             self.pixel_processor.start(
                 self.ly,
                 self.dots,
@@ -124,9 +143,7 @@ impl PPU {
                 &self.bg_palette,
             );
             self.lcd_status.mode = ScreenMode::TransferringData;
-        } else if self.pixel_processor.finished() {
-            self.lcd_status.mode = ScreenMode::HBlank;
-        } else {
+        } else if !self.pixel_processor.finished() {
             self.pixel_processor.process(
                 self.ly,
                 self.dots,
@@ -135,6 +152,11 @@ impl PPU {
                 &self.vram,
                 &self.bg_palette,
             );
+            if self.dots > MODE_3_DOTS_MAX {
+                log::error!("mode 3 out of bounds {}", self.dots);
+            }
+        } else {
+            self.lcd_status.mode = ScreenMode::HBlank;
         }
 
         Ok(vblank_ev)
@@ -180,8 +202,8 @@ impl PPU {
         match addr {
             0x0040 => Ok(self.lcd_control.into()),
             0x0041 => Ok(self.lcd_status.into()),
-            0x0042 => Ok(self.viewport.0),
-            0x0043 => Ok(self.viewport.1),
+            0x0042 => Ok(self.viewport.1),
+            0x0043 => Ok(self.viewport.0),
             0x0044 => Ok(self.ly),
             0x0045 => Ok(self.lyc),
             0x0047 => Ok(self.bg_palette.into()),
@@ -196,8 +218,8 @@ impl PPU {
         match addr {
             0x0040 => Ok(self.lcd_control = value.into()),
             0x0041 => Ok(self.lcd_status = value.into()),
-            0x0042 => Ok(self.viewport.0 = value),
-            0x0043 => Ok(self.viewport.1 = value),
+            0x0042 => Ok(self.viewport.1 = value),
+            0x0043 => Ok(self.viewport.0 = value),
             0x0044 => Err(GbError::IllegalOp("Cannot write to LY register".into())),
             0x0045 => Ok(self.lyc = value),
             0x0047 => Ok(self.bg_palette = value.into()),
@@ -224,10 +246,10 @@ impl PPU {
 
     fn update_tile_list(&mut self) -> Result<(), GbError> {
         let palette = [
-            Tile::shade_to_rgba(self.bg_palette.color_0()),
-            Tile::shade_to_rgba(self.bg_palette.color_1()),
-            Tile::shade_to_rgba(self.bg_palette.color_2()),
-            Tile::shade_to_rgba(self.bg_palette.color_3()),
+            self.bg_palette.color_0().to_rgba(),
+            self.bg_palette.color_1().to_rgba(),
+            self.bg_palette.color_2().to_rgba(),
+            self.bg_palette.color_3().to_rgba(),
         ];
 
         if self.lcd_control.bg_and_window_tile_area_sel {
