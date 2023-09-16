@@ -1,18 +1,18 @@
 pub mod background_palette;
 pub mod lcd_control_register;
 pub mod lcd_status_register;
-pub mod pixel;
 pub mod pixel_processor;
+pub mod rgba;
 pub mod tile;
 
 use byteorder::{ByteOrder, LittleEndian};
 
 use self::{
-    background_palette::{BackgroundPalette, GrayShade},
+    background_palette::BackgroundPalette,
     lcd_control_register::LcdControlRegister,
     lcd_status_register::{LcsStatusRegister, ScreenMode},
-    pixel::Rgba,
     pixel_processor::PixelProcessor,
+    rgba::Rgba,
     tile::Tile,
 };
 use crate::gbr::{
@@ -147,7 +147,7 @@ impl PPU {
             self.lcd_status.mode = ScreenMode::VBlank;
         } else if self.dots <= MODE_2_DOTS {
             self.lcd_status.mode = ScreenMode::SreachingOAM;
-            // self.update_tile_list()?;
+            self.update_tile_list()?;
         } else if self.lcd_status.mode == ScreenMode::SreachingOAM {
             self.pixel_processor.start(
                 self.ly,
