@@ -1,6 +1,6 @@
 use crate::gbr::cpu::CpuState;
 
-pub fn show(state: &CpuState, ui: &mut egui::Ui) {
+pub fn show(state: &mut CpuState, ui: &mut egui::Ui) {
     ui.heading("CPU");
     ui.label("Registers:");
 
@@ -11,9 +11,11 @@ pub fn show(state: &CpuState, ui: &mut egui::Ui) {
 
     ui.label(label);
 
-    ui.label("Flags:");
-    ui.label(format!(
-        "Z: {}, C: {}, BCD-N: {}, BCD-H: {}",
-        state.zero, state.carry, state.bcd_n, state.bcd_h
-    ));
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Flags:");
+        ui.checkbox(&mut state.zero, "Z");
+        ui.checkbox(&mut state.carry, "C");
+        ui.checkbox(&mut state.bcd_n, "N");
+        ui.checkbox(&mut state.bcd_h, "H");
+    });
 }

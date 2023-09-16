@@ -12,6 +12,7 @@ use winit::{event::WindowEvent, window::Window};
 use super::debugger::DebuggerCommand;
 use super::debugger::EmuState;
 use super::io_registers_view;
+use super::palette_view::PaletteView;
 use super::tiles_view::TilesView;
 use super::{asm_view, cpu_view, debugger::Debugger};
 
@@ -22,6 +23,7 @@ struct UiState {
     show_tiles: bool,
     debugger: Debugger,
     tiles_view: TilesView,
+    palette_view: PaletteView,
     emu_state: EmuState,
     breakpoints: HashSet<u16>,
 }
@@ -35,6 +37,7 @@ impl UiState {
             show_tiles: true,
             debugger,
             tiles_view: TilesView::default(),
+            palette_view: PaletteView::new(),
             emu_state: EmuState::Idle,
             breakpoints: HashSet::new(),
         }
@@ -111,13 +114,13 @@ impl UiState {
                 });
             });
 
-        let gb_state = self.debugger.gb_state.read().unwrap().clone();
+        let mut gb_state = self.debugger.gb_state.read().unwrap().clone();
 
         egui::SidePanel::new(egui::panel::Side::Left, "ASM")
             .default_width(300.0)
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
-                    cpu_view::show(&gb_state.cpu, ui);
+                    cpu_view::show(&mut gb_state.cpu, ui);
                     ui.separator();
                     io_registers_view::show(&gb_state.io_registers, ui);
                     ui.separator();
@@ -143,14 +146,18 @@ impl UiState {
                         gb_state.ppu.viewport.0, gb_state.ppu.viewport.1, gb_state.ppu.ly
                     ));
                     ui.separator();
-                    ui.heading("Palette");
-                    ui.label(format!(
-                        "C0: {}, C1: {}, C3: {}, C4: {}",
-                        gb_state.ppu.bg_palette.color_0() as u8,
-                        gb_state.ppu.bg_palette.color_1() as u8,
-                        gb_state.ppu.bg_palette.color_2() as u8,
-                        gb_state.ppu.bg_palette.color_3() as u8,
-                    ));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Palette: ");
+                        self.palette_view.show(&gb_state.ppu.bg_palette, ui);
+                    });
+
+                    // ui.label(format!(
+                    //     "C0: {}, C1: {}, C3: {}, C4: {}",
+                    //     gb_state.ppu.bg_palette.color_0() as u8,
+                    //     gb_state.ppu.bg_palette.color_1() as u8,
+                    //     gb_state.ppu.bg_palette.color_2() as u8,
+                    //     gb_state.ppu.bg_palette.color_3() as u8,
+                    // ));
                 });
             });
     }
