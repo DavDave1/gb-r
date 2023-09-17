@@ -63,8 +63,7 @@ pub struct PpuState {
     pub ly: u8,
     pub lyc: u8,
     pub viewport: (u8, u8),
-    pub bg_win_tiles: Vec<Tile>,
-    pub obj_tiles: Vec<Tile>,
+    pub tiles_list: Vec<Tile>,
 }
 
 pub struct PPU {
@@ -75,9 +74,7 @@ pub struct PPU {
     ly: u8,
     lyc: u8,
     viewport: (u8, u8),
-    bg_win_tiles: Vec<Tile>,
-    obj_tiles: Vec<Tile>,
-    tile_list_updated: bool,
+    tiles_list: Vec<Tile>,
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
     dots: u16,
     pixel_processor: PixelProcessor,
@@ -93,9 +90,7 @@ impl PPU {
             ly: 0,
             lyc: 0,
             viewport: (0, 0),
-            bg_win_tiles: vec![Tile::default(); 2 * TILE_BLOCK_SIZE],
-            obj_tiles: vec![Tile::default(); 2 * TILE_BLOCK_SIZE],
-            tile_list_updated: false,
+            tiles_list: vec![Tile::default(); 3 * TILE_BLOCK_SIZE],
             render_ch: flume::bounded(1),
             dots: 0,
             pixel_processor: PixelProcessor::new(),
@@ -110,9 +105,7 @@ impl PPU {
         self.ly = 0;
         self.lyc = 0;
         self.viewport = (0, 0);
-        self.bg_win_tiles.fill(Tile::default());
-        self.obj_tiles.fill(Tile::default());
-        self.tile_list_updated = false;
+        self.tiles_list.fill(Tile::default());
         self.dots = 0;
         self.pixel_processor = PixelProcessor::new();
     }
@@ -147,7 +140,6 @@ impl PPU {
             self.lcd_status.mode = ScreenMode::VBlank;
         } else if self.dots <= MODE_2_DOTS {
             self.lcd_status.mode = ScreenMode::SreachingOAM;
-            self.update_tile_list()?;
         } else if self.lcd_status.mode == ScreenMode::SreachingOAM {
             self.pixel_processor.start(
                 self.ly,
@@ -208,6 +200,7 @@ impl PPU {
 
         if !self.lcd_control.display_enable {
             self.vram[addr as usize] = value;
+            self.update_tile_list();
         }
 
         Ok(())
@@ -254,37 +247,17 @@ impl PPU {
             .0
             .try_send(self.pixel_processor.screen_buffer.clone())
             .ok();
-        self.tile_list_updated = false;
         self.pixel_processor.screen_buffer.fill(0);
         Ok(())
     }
 
-    fn update_tile_list(&mut self) -> Result<(), GbError> {
-        if self.lcd_control.bg_and_window_tile_area_sel {
-            PPU::parse_tiles(
-                &self.vram,
-                TILE_BLOCK0_START as usize,
-                TILE_BLOCK1_END as usize,
-                &mut self.bg_win_tiles,
-            );
-        } else {
-            PPU::parse_tiles(
-                &self.vram,
-                TILE_BLOCK2_START as usize,
-                TILE_BLOCK2_END as usize,
-                &mut self.bg_win_tiles,
-            );
-            PPU::parse_tiles(
-                &self.vram,
-                TILE_BLOCK1_START as usize,
-                TILE_BLOCK1_END as usize,
-                &mut self.bg_win_tiles[128..],
-            );
-        }
-
-        self.tile_list_updated = true;
-
-        Ok(())
+    fn update_tile_list(&mut self) {
+        PPU::parse_tiles(
+            &self.vram,
+            TILE_BLOCK0_START as usize,
+            TILE_BLOCK2_END as usize,
+            &mut self.tiles_list,
+        );
     }
 
     fn parse_tiles(vram: &[u8], start_addr: usize, end_addr: usize, dst: &mut [Tile]) {
@@ -305,8 +278,7 @@ impl PPU {
             ly: self.ly,
             lyc: self.lyc,
             viewport: self.viewport,
-            bg_win_tiles: self.bg_win_tiles.clone(),
-            obj_tiles: self.obj_tiles.clone(),
+            tiles_list: self.tiles_list.clone(),
         }
     }
 

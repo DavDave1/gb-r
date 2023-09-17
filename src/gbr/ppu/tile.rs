@@ -1,6 +1,5 @@
 use random_color::RandomColor;
 
-use super::rgba::Rgba;
 use super::{TILE_HEIGHT, TILE_WIDTH};
 
 lazy_static! {
