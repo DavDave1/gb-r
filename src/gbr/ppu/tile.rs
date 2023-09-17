@@ -20,34 +20,45 @@ lazy_static! {
 
 #[derive(Clone, Copy)]
 pub struct Tile {
-    pub pixels: [[Rgba; TILE_WIDTH as usize]; TILE_HEIGHT as usize],
+    pub pixels: [u8; TILE_WIDTH as usize * TILE_HEIGHT as usize],
 }
 
 impl Default for Tile {
     fn default() -> Self {
         Self {
-            pixels: [[Rgba::white(); TILE_WIDTH as usize]; TILE_HEIGHT as usize],
+            pixels: [0; TILE_WIDTH as usize * TILE_HEIGHT as usize],
         }
     }
 }
 
 impl Tile {
-    pub fn from_data(data: &[u8], palette: &[Rgba]) -> Self {
+    pub fn from_data(data: &[u8]) -> Self {
         let mut tile = Self::default();
 
         // Tile data is represented as 2 bytes per line
-        for (y, line) in data.chunks_exact(2).enumerate() {
-            for x in 0..8 {
-                let shift = 7 - x;
+        let mut index = 0;
+        for line in data.chunks_exact(2) {
+            Self::decode_line(
+                line[1],
+                line[0],
+                &mut tile.pixels[index..index + TILE_WIDTH as usize],
+            );
 
-                let msb = line[1] >> shift & 0b1;
-                let lsb = line[0] >> shift & 0b1;
-                let color_id = (msb << 1u16) + lsb;
-
-                tile.pixels[x][y] = palette[color_id as usize];
-            }
+            index += TILE_WIDTH as usize;
         }
 
         tile
+    }
+
+    pub fn decode_line(msb_in: u8, lsb_in: u8, dst: &mut [u8]) {
+        for x in 0..8 {
+            let shift = 7 - x;
+
+            let msb = msb_in >> shift & 0b1;
+            let lsb = lsb_in >> shift & 0b1;
+            let color_id = (msb << 1u16) + lsb;
+
+            dst[x] = color_id;
+        }
     }
 }

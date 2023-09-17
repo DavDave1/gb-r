@@ -260,19 +260,11 @@ impl PPU {
     }
 
     fn update_tile_list(&mut self) -> Result<(), GbError> {
-        let palette = [
-            self.bg_palette.color_0().to_rgba(),
-            self.bg_palette.color_1().to_rgba(),
-            self.bg_palette.color_2().to_rgba(),
-            self.bg_palette.color_3().to_rgba(),
-        ];
-
         if self.lcd_control.bg_and_window_tile_area_sel {
             PPU::parse_tiles(
                 &self.vram,
                 TILE_BLOCK0_START as usize,
                 TILE_BLOCK1_END as usize,
-                &palette,
                 &mut self.bg_win_tiles,
             );
         } else {
@@ -280,14 +272,12 @@ impl PPU {
                 &self.vram,
                 TILE_BLOCK2_START as usize,
                 TILE_BLOCK2_END as usize,
-                &palette,
                 &mut self.bg_win_tiles,
             );
             PPU::parse_tiles(
                 &self.vram,
                 TILE_BLOCK1_START as usize,
                 TILE_BLOCK1_END as usize,
-                &palette,
                 &mut self.bg_win_tiles[128..],
             );
         }
@@ -297,17 +287,11 @@ impl PPU {
         Ok(())
     }
 
-    fn parse_tiles(
-        vram: &[u8],
-        start_addr: usize,
-        end_addr: usize,
-        palette: &[Rgba],
-        dst: &mut [Tile],
-    ) {
+    fn parse_tiles(vram: &[u8], start_addr: usize, end_addr: usize, dst: &mut [Tile]) {
         let mut tile_index = 0;
         let mut addr = start_addr;
         while addr <= end_addr {
-            dst[tile_index] = Tile::from_data(&vram[addr..addr + TILE_DATA_SIZE], &palette);
+            dst[tile_index] = Tile::from_data(&vram[addr..addr + TILE_DATA_SIZE]);
             tile_index += 1;
             addr += TILE_DATA_SIZE;
         }

@@ -133,7 +133,8 @@ impl UiState {
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     ui.heading("Tiles");
-                    self.tiles_view.show(&gb_state.ppu.bg_win_tiles, ui);
+                    self.tiles_view
+                        .show(&gb_state.ppu.bg_win_tiles, &gb_state.ppu.bg_palette, ui);
                     ui.separator();
                     ui.heading("LCD Ctrl");
                     ui.label(format!("{}", gb_state.ppu.lcd_control));
@@ -150,14 +151,6 @@ impl UiState {
                         ui.label("Palette: ");
                         self.palette_view.show(&gb_state.ppu.bg_palette, ui);
                     });
-
-                    // ui.label(format!(
-                    //     "C0: {}, C1: {}, C3: {}, C4: {}",
-                    //     gb_state.ppu.bg_palette.color_0() as u8,
-                    //     gb_state.ppu.bg_palette.color_1() as u8,
-                    //     gb_state.ppu.bg_palette.color_2() as u8,
-                    //     gb_state.ppu.bg_palette.color_3() as u8,
-                    // ));
                 });
             });
     }

@@ -1,13 +1,20 @@
 use egui::{ColorImage, TextureOptions};
 use image::{GenericImage, RgbaImage};
 
-use crate::gbr::ppu::{TileList, TILE_HEIGHT, TILE_WIDTH};
+use crate::gbr::ppu::{background_palette::BackgroundPalette, TileList, TILE_HEIGHT, TILE_WIDTH};
 
 const TILE_PER_ROW: usize = 16;
 
 // TODO: replace usage if image library with handmade
 // tilemap to frame generator
-fn create_image(tiles: &TileList) -> ColorImage {
+fn create_image(tiles: &TileList, palette: &BackgroundPalette) -> ColorImage {
+    let rgba_palette = [
+        palette.to_rgba(0).rgba,
+        palette.to_rgba(1).rgba,
+        palette.to_rgba(2).rgba,
+        palette.to_rgba(3).rgba,
+    ];
+
     let rows_count = tiles.len() / TILE_PER_ROW as usize;
     let w = TILE_PER_ROW * TILE_WIDTH as usize;
     let h = rows_count * TILE_HEIGHT as usize;
@@ -20,9 +27,15 @@ fn create_image(tiles: &TileList) -> ColorImage {
 
         let mut tile_region = img.sub_image(x, y, TILE_WIDTH, TILE_HEIGHT);
 
-        for r in 0..TILE_WIDTH as usize {
-            for c in 0..TILE_HEIGHT as usize {
-                tile_region.put_pixel(r as u32, c as u32, image::Rgba(tile.pixels[r][c].rgba));
+        for r in 0..TILE_HEIGHT as usize {
+            for c in 0..TILE_WIDTH as usize {
+                let index = r * TILE_WIDTH as usize + c;
+
+                tile_region.put_pixel(
+                    c as u32,
+                    r as u32,
+                    image::Rgba(rgba_palette[tile.pixels[index] as usize]),
+                );
             }
         }
     }
@@ -46,17 +59,19 @@ pub struct TilesView {
 }
 
 impl TilesView {
-    pub fn show(&mut self, tiles: &TileList, ui: &mut egui::Ui) {
+    pub fn show(&mut self, tiles: &TileList, palette: &BackgroundPalette, ui: &mut egui::Ui) {
         if tiles.len() > TILE_PER_ROW {
             match self.texture.as_mut() {
                 None => {
                     self.texture = Some(ui.ctx().load_texture(
                         "tiles_view",
-                        create_image(tiles),
+                        create_image(tiles, palette),
                         egui::TextureOptions::default(),
                     ));
                 }
-                Some(tex_ref) => tex_ref.set(create_image(tiles), TextureOptions::default()),
+                Some(tex_ref) => {
+                    tex_ref.set(create_image(tiles, palette), TextureOptions::default())
+                }
             }
 
             let tex_ref = self.texture.as_ref().unwrap();
