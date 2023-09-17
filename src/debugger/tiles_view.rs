@@ -8,13 +8,6 @@ const TILE_PER_ROW: usize = 16;
 // TODO: replace usage if image library with handmade
 // tilemap to frame generator
 fn create_image(tiles: &TileList, palette: &BackgroundPalette) -> ColorImage {
-    let rgba_palette = [
-        palette.to_rgba(0).rgba,
-        palette.to_rgba(1).rgba,
-        palette.to_rgba(2).rgba,
-        palette.to_rgba(3).rgba,
-    ];
-
     let rows_count = tiles.len() / TILE_PER_ROW as usize;
     let w = TILE_PER_ROW * TILE_WIDTH as usize;
     let h = rows_count * TILE_HEIGHT as usize;
@@ -34,7 +27,7 @@ fn create_image(tiles: &TileList, palette: &BackgroundPalette) -> ColorImage {
                 tile_region.put_pixel(
                     c as u32,
                     r as u32,
-                    image::Rgba(rgba_palette[tile.pixels[index] as usize]),
+                    image::Rgba(palette.rgba(tile.pixels[index]).rgba),
                 );
             }
         }

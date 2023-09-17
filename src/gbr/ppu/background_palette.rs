@@ -52,35 +52,36 @@ impl From<GrayShade> for u8 {
 
 #[derive(Copy, Clone)]
 pub struct BackgroundPalette {
-    palette: [GrayShade; 4],
+    indexed: [GrayShade; 4],
+    rgba: [Rgba; 4],
 }
 
 impl BackgroundPalette {
-    pub fn color_0(&self) -> GrayShade {
-        self.palette[0]
+    pub fn new(color0: GrayShade, color1: GrayShade, color2: GrayShade, color3: GrayShade) -> Self {
+        Self {
+            indexed: [color0, color1, color2, color3],
+            rgba: [
+                color0.to_rgba(),
+                color1.to_rgba(),
+                color2.to_rgba(),
+                color3.to_rgba(),
+            ],
+        }
+    }
+    pub fn indexed(&self, color_id: u8) -> GrayShade {
+        self.indexed[color_id as usize]
     }
 
-    pub fn color_1(&self) -> GrayShade {
-        self.palette[1]
-    }
-
-    pub fn color_2(&self) -> GrayShade {
-        self.palette[2]
-    }
-
-    pub fn color_3(&self) -> GrayShade {
-        self.palette[3]
-    }
-
-    pub fn to_rgba(&self, color_id: u8) -> Rgba {
-        self.palette[color_id as usize].to_rgba()
+    pub fn rgba(&self, color_id: u8) -> &Rgba {
+        &self.rgba[color_id as usize]
     }
 }
 
 impl Default for BackgroundPalette {
     fn default() -> Self {
         BackgroundPalette {
-            palette: [GrayShade::White; 4],
+            indexed: [GrayShade::White; 4],
+            rgba: [Rgba::default(); 4],
         }
     }
 }
@@ -88,22 +89,20 @@ impl Default for BackgroundPalette {
 impl From<u8> for BackgroundPalette {
     fn from(value: u8) -> Self {
         let mask: u8 = 0b0000011;
-        BackgroundPalette {
-            palette: [
-                GrayShade::from(value & mask),
-                GrayShade::from(value >> 2 & mask),
-                GrayShade::from(value >> 4 & mask),
-                GrayShade::from(value >> 6 & mask),
-            ],
-        }
+        BackgroundPalette::new(
+            GrayShade::from(value & mask),
+            GrayShade::from(value >> 2 & mask),
+            GrayShade::from(value >> 4 & mask),
+            GrayShade::from(value >> 6 & mask),
+        )
     }
 }
 
 impl From<BackgroundPalette> for u8 {
     fn from(value: BackgroundPalette) -> Self {
-        value.palette[0] as u8
-            | (value.palette[1] as u8) << 2
-            | (value.palette[2] as u8) << 4
-            | (value.palette[3] as u8) << 6
+        value.indexed[0] as u8
+            | (value.indexed[1] as u8) << 2
+            | (value.indexed[2] as u8) << 4
+            | (value.indexed[3] as u8) << 6
     }
 }

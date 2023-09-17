@@ -1,9 +1,10 @@
 use crate::gbr::ppu::TILEMAP_BLOCK0_START;
 
 use super::{
-    background_palette::BackgroundPalette, lcd_control_register::LcdControlRegister,
-    tile::TILE_COLOR_ID, MODE_2_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_BLOCK1_START,
-    TILE_BLOCK2_START, TILE_DATA_SIZE,
+    background_palette::BackgroundPalette,
+    lcd_control_register::LcdControlRegister,
+    tile::{Tile, TILE_COLOR_ID},
+    MODE_2_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_BLOCK1_START, TILE_BLOCK2_START, TILE_DATA_SIZE,
 };
 
 #[derive(PartialEq)]
@@ -154,19 +155,16 @@ impl PixelProcessor {
     }
 
     fn draw_tile(&mut self, ly: u8, bg_palette: &BackgroundPalette) {
+        let mut line = [0; 8];
+        Tile::decode_line(self.curr_tile_msb, self.curr_tile_lsb, &mut line);
+
         for x in 0..8 {
-            let shift = 7 - x;
-
-            let msb = self.curr_tile_msb >> shift & 0b1;
-            let lsb = self.curr_tile_lsb >> shift & 0b1;
-            let color_id = (msb << 1u16) + lsb;
-
             let screen_x = (self.scan_line_x + x) as usize;
             let screen_y = ly as usize;
             let screen_index = (screen_y * SCREEN_WIDTH as usize + screen_x) * 4;
 
             self.screen_buffer[screen_index..screen_index + 4]
-                .copy_from_slice(&bg_palette.to_rgba(color_id).rgba);
+                .copy_from_slice(&bg_palette.rgba(line[x as usize]).rgba);
 
             // self.screen_buffer[screen_index..screen_index + 3]
             //     .copy_from_slice(&TILE_COLOR_ID[self.curr_tile_index as usize]);

@@ -33,19 +33,12 @@ impl PaletteView {
     }
 
     fn update_image(&mut self, palette: &BackgroundPalette) {
-        let rgba_palette = [
-            palette.to_rgba(0).rgba,
-            palette.to_rgba(1).rgba,
-            palette.to_rgba(2).rgba,
-            palette.to_rgba(3).rgba,
-        ];
-
         for index in 0..SIZE[0] * SIZE[1] {
             let x = (index) % SIZE[0];
 
             let color_id = x / PALETTE_TILE_WIDTH;
 
-            let rgba = &rgba_palette[color_id];
+            let rgba = &palette.rgba(color_id as u8).rgba;
             self.img.pixels[index] =
                 Color32::from_rgba_unmultiplied(rgba[0], rgba[1], rgba[2], rgba[3]);
         }
