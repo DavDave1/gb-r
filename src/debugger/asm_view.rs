@@ -1,21 +1,20 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::mpsc::Sender};
 
 use crate::{debugger::debugger::DebuggerCommand, gbr::cpu::CpuState};
 
 use egui::{Label, Sense};
 use egui_extras::{Column, TableBuilder};
 
-use super::debugger::Debugger;
+use super::debugger::AsmState;
 
 pub fn show(
-    debugger: &Debugger,
+    cmd_sig: &Sender<DebuggerCommand>,
+    asm: &AsmState,
     cpu: &CpuState,
     breakpoints: &mut HashSet<u16>,
     ui: &mut egui::Ui,
 ) {
     let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
-
-    let asm = debugger.asm();
 
     egui::ScrollArea::horizontal()
         .auto_shrink([true, false])
@@ -39,7 +38,7 @@ pub fn show(
                                     .double_clicked()
                                 {
                                     breakpoints.remove(pc);
-                                    debugger.send_cmd(DebuggerCommand::UnsetBreakpoint(*pc));
+                                    cmd_sig.send(DebuggerCommand::UnsetBreakpoint(*pc)).unwrap();
                                 }
                             } else {
                                 if ui
@@ -47,7 +46,7 @@ pub fn show(
                                     .double_clicked()
                                 {
                                     breakpoints.insert(*pc);
-                                    debugger.send_cmd(DebuggerCommand::SetBreakpoint(*pc));
+                                    cmd_sig.send(DebuggerCommand::SetBreakpoint(*pc)).unwrap();
                                 }
                             }
                         });

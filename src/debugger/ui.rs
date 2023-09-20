@@ -1,51 +1,73 @@
 use std::collections::HashSet;
+use std::sync::mpsc::Sender;
+use std::sync::{Arc, RwLock};
 
 use egui::ClippedPrimitive;
 use egui::{Context, TexturesDelta, TopBottomPanel};
 use egui_wgpu::renderer::ScreenDescriptor;
 use egui_wgpu::Renderer;
+use flume::Receiver;
 use pixels::wgpu;
 use pixels::PixelsContext;
 use winit::event_loop::EventLoopWindowTarget;
 use winit::{event::WindowEvent, window::Window};
 
-use super::debugger::DebuggerCommand;
-use super::debugger::EmuState;
+use crate::gbr::game_boy::GbState;
+
+use super::debugger::{AsmState, DebuggerCommand};
+use super::debugger_app::EmuState;
 use super::io_registers_view;
 use super::palette_view::PaletteView;
 use super::tiles_view::TilesView;
-use super::{asm_view, cpu_view, debugger::Debugger};
+use super::{asm_view, cpu_view};
 
 struct UiState {
     show_asm_view: bool,
     show_cpu_view: bool,
     show_registers_view: bool,
     show_tiles: bool,
-    debugger: Debugger,
+    gb_state_next: Arc<RwLock<GbState>>,
+    gb_state: GbState,
+    cmd_sig: Sender<DebuggerCommand>,
     tiles_view: TilesView,
     palette_view: PaletteView,
     emu_state: EmuState,
+    emu_state_slot: Receiver<EmuState>,
     breakpoints: HashSet<u16>,
+    asm: AsmState,
 }
 
 impl UiState {
-    fn new(debugger: Debugger) -> Self {
+    fn new(
+        gb_state: Arc<RwLock<GbState>>,
+        cmd_sig: Sender<DebuggerCommand>,
+        emu_state_slot: Receiver<EmuState>,
+        asm: AsmState,
+    ) -> Self {
         Self {
             show_asm_view: true,
             show_cpu_view: true,
             show_registers_view: true,
             show_tiles: true,
-            debugger,
+            gb_state_next: gb_state,
+            gb_state: GbState::default(),
+            cmd_sig,
             tiles_view: TilesView::default(),
             palette_view: PaletteView::new(),
             emu_state: EmuState::Idle,
+            emu_state_slot,
             breakpoints: HashSet::new(),
+            asm,
         }
     }
 
     fn update_debug_data(&mut self) {
-        if let Some(state) = self.debugger.emu_state() {
+        if let Ok(state) = self.emu_state_slot.try_recv() {
             self.emu_state = state;
+        }
+
+        if let Ok(state) = self.gb_state_next.try_read() {
+            self.gb_state = state.clone();
         }
     }
 
@@ -85,46 +107,50 @@ impl UiState {
                     match self.emu_state {
                         EmuState::Running => {
                             if ui.button("Stop").clicked() {
-                                self.debugger.send_cmd(DebuggerCommand::Stop).unwrap();
+                                self.cmd_sig.send(DebuggerCommand::Stop).unwrap();
                             }
 
                             if ui.button("Pause").clicked() {
-                                self.debugger.send_cmd(DebuggerCommand::Pause).unwrap();
+                                self.cmd_sig.send(DebuggerCommand::Pause).unwrap();
                             }
                         }
                         EmuState::Idle => {
                             if ui.button("Start").clicked() {
-                                self.debugger.send_cmd(DebuggerCommand::Run).unwrap();
+                                self.cmd_sig.send(DebuggerCommand::Run).unwrap();
                             }
 
                             if ui.button("Step").clicked() {
-                                self.debugger.send_cmd(DebuggerCommand::Step).unwrap();
+                                self.cmd_sig.send(DebuggerCommand::Step).unwrap();
                             }
                         }
                         EmuState::Error => {
                             if ui.button("Stop").clicked() {
-                                self.debugger.send_cmd(DebuggerCommand::Stop).unwrap();
+                                self.cmd_sig.send(DebuggerCommand::Stop).unwrap();
                             }
                         }
                     }
 
                     if ui.button("Dump VRAM").clicked() {
-                        self.debugger.send_cmd(DebuggerCommand::DumpVram).unwrap();
+                        self.cmd_sig.send(DebuggerCommand::DumpVram).unwrap();
                     }
                 });
             });
-
-        let mut gb_state = self.debugger.gb_state.read().unwrap().clone();
 
         egui::SidePanel::new(egui::panel::Side::Left, "ASM")
             .default_width(300.0)
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
-                    cpu_view::show(&mut gb_state.cpu, ui);
+                    cpu_view::show(&mut self.gb_state.cpu, ui);
                     ui.separator();
-                    io_registers_view::show(&gb_state.io_registers, ui);
+                    io_registers_view::show(&self.gb_state.io_registers, ui);
                     ui.separator();
-                    asm_view::show(&self.debugger, &gb_state.cpu, &mut self.breakpoints, ui);
+                    asm_view::show(
+                        &self.cmd_sig,
+                        &self.asm,
+                        &self.gb_state.cpu,
+                        &mut self.breakpoints,
+                        ui,
+                    );
                 });
             });
 
@@ -133,23 +159,28 @@ impl UiState {
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     ui.heading("Tiles");
-                    self.tiles_view
-                        .show(&gb_state.ppu.tiles_list, &gb_state.ppu.bg_palette, ui);
+                    self.tiles_view.show(
+                        &self.gb_state.ppu.tiles_list,
+                        &self.gb_state.ppu.bg_palette,
+                        ui,
+                    );
                     ui.separator();
                     ui.heading("LCD Ctrl");
-                    ui.label(format!("{}", gb_state.ppu.lcd_control));
+                    ui.label(format!("{}", self.gb_state.ppu.lcd_control));
                     ui.separator();
                     ui.heading("LCD Status");
-                    ui.label(format!("{}", gb_state.ppu.lcd_status));
+                    ui.label(format!("{}", self.gb_state.ppu.lcd_status));
                     ui.heading("Viewport");
                     ui.label(format!(
                         "X: {}, Y: {}, LY: {}",
-                        gb_state.ppu.viewport.0, gb_state.ppu.viewport.1, gb_state.ppu.ly
+                        self.gb_state.ppu.viewport.0,
+                        self.gb_state.ppu.viewport.1,
+                        self.gb_state.ppu.ly
                     ));
                     ui.separator();
                     ui.horizontal_wrapped(|ui| {
                         ui.label("Palette: ");
-                        self.palette_view.show(&gb_state.ppu.bg_palette, ui);
+                        self.palette_view.show(&self.gb_state.ppu.bg_palette, ui);
                     });
                 });
             });
@@ -168,14 +199,18 @@ pub struct Ui {
 
 impl Ui {
     pub fn new<T>(
-        debugger: Debugger,
+        gb_state: Arc<RwLock<GbState>>,
+        cmd_sig: Sender<DebuggerCommand>,
+        emu_state_slot: Receiver<EmuState>,
+        asm: AsmState,
         event_loop: &EventLoopWindowTarget<T>,
         width: u32,
         height: u32,
         scale_factor: f32,
-        pixels: &pixels::Pixels,
+        device: &wgpu::Device,
+        texture_format: wgpu::TextureFormat,
     ) -> Self {
-        let max_texture_size = pixels.device().limits().max_texture_dimension_2d as usize;
+        let max_texture_size = device.limits().max_texture_dimension_2d as usize;
 
         let mut egui_state = egui_winit::State::new(event_loop);
         egui_state.set_max_texture_side(max_texture_size);
@@ -185,7 +220,7 @@ impl Ui {
             pixels_per_point: scale_factor,
         };
 
-        let renderer = Renderer::new(pixels.device(), pixels.render_texture_format(), None, 1);
+        let renderer = Renderer::new(device, texture_format, None, 1);
 
         Self {
             ctx: Context::default(),
@@ -194,7 +229,7 @@ impl Ui {
             renderer,
             paint_jobs: vec![],
             textures: TexturesDelta::default(),
-            state: UiState::new(debugger),
+            state: UiState::new(gb_state, cmd_sig, emu_state_slot, asm),
         }
     }
 

@@ -1,16 +1,10 @@
 use std::{
     collections::HashSet,
-    sync::{
-        mpsc::{channel, Sender},
-        Arc, RwLock,
-    },
-    time::{Duration, SystemTime},
+    sync::{Arc, RwLock},
 };
 
-use crate::gbr::game_boy::GameBoy;
-use crate::gbr::io_registers::IORegisters;
-use crate::gbr::{cpu::CpuState, ppu::ScreenBuffer};
-use crate::gbr::{instruction::Instruction, ppu::PpuState};
+use crate::gbr::game_boy::{GameBoy, GbState};
+use crate::gbr::instruction::Instruction;
 
 pub type AsmState = Vec<(u16, Option<Instruction>)>;
 
@@ -24,164 +18,29 @@ pub enum DebuggerCommand {
     DumpVram,
 }
 
-pub enum EmuState {
-    Idle,
-    Running,
-    Error,
-}
-
-#[derive(Default, Clone)]
-pub struct GbState {
-    pub cpu: CpuState,
-    pub io_registers: IORegisters,
-    pub ppu: PpuState,
-}
-
 pub struct Debugger {
-    emu_state: (flume::Sender<EmuState>, flume::Receiver<EmuState>),
-    cmd_ch: Option<Sender<DebuggerCommand>>,
-    render_slot: flume::Receiver<ScreenBuffer>,
-    asm: AsmState,
     pub gb_state: Arc<RwLock<GbState>>,
+    breakpoints: HashSet<u16>,
 }
 
 impl Debugger {
-    pub fn new(game_boy: Arc<RwLock<GameBoy>>) -> Self {
-        let render_slot = game_boy.read().unwrap().ppu().render_watch();
-        let asm = Self::disassemble(game_boy);
-
-        let debugger = Debugger {
-            emu_state: flume::bounded(1),
-            cmd_ch: None,
-            render_slot,
-            asm,
+    pub fn new() -> Self {
+        Debugger {
             gb_state: Default::default(),
-        };
-
-        debugger.emu_state.0.try_send(EmuState::Idle).ok();
-
-        debugger
+            breakpoints: HashSet::new(),
+        }
     }
 
-    pub fn attach(gb: Arc<RwLock<GameBoy>>) -> Self {
-        let mut debugger = Debugger::new(gb.clone());
-
-        debugger.run(gb, debugger.gb_state.clone());
-
-        debugger
+    pub fn add_breakpoint(&mut self, pc: u16) {
+        self.breakpoints.insert(pc);
     }
 
-    fn run(&mut self, emu: Arc<RwLock<GameBoy>>, state: Arc<RwLock<GbState>>) {
-        let (cmd_sig, cmd_slot) = channel::<DebuggerCommand>();
-        self.cmd_ch = Some(cmd_sig);
-
-        let emu_state_sig = self.emu_state.0.clone();
-
-        self.emu_state.0.try_send(EmuState::Running).ok();
-
-        let frame_time = Duration::from_secs_f64(1.0 / 59.7);
-
-        std::thread::spawn(move || {
-            let mut emu: std::sync::RwLockWriteGuard<'_, GameBoy> = emu.write().unwrap();
-
-            let mut running = false;
-            let mut stepping = false;
-
-            let mut breakpoints = HashSet::<u16>::new();
-
-            let mut now = SystemTime::now();
-            loop {
-                if running {
-                    if let Ok(mut state) = state.try_write() {
-                        state.cpu = emu.cpu().state();
-                        state.io_registers = emu.bus().io_registers().clone();
-                        state.ppu = emu.bus().ppu().state();
-                    }
-                } else {
-                    if let Ok(mut state) = state.write() {
-                        state.cpu = emu.cpu().state();
-                        state.io_registers = emu.bus().io_registers().clone();
-                        state.ppu = emu.bus().ppu().state();
-                    }
-                }
-
-                let cmd = if !running {
-                    cmd_slot.recv().ok()
-                } else {
-                    cmd_slot.try_recv().ok()
-                };
-
-                match cmd {
-                    Some(DebuggerCommand::Run) => {
-                        emu_state_sig.try_send(EmuState::Running).ok();
-                        running = true;
-                    }
-                    Some(DebuggerCommand::Stop) => {
-                        emu_state_sig.try_send(EmuState::Idle).ok();
-                        emu.reset();
-                        running = false;
-                    }
-                    Some(DebuggerCommand::Pause) => {
-                        emu_state_sig.try_send(EmuState::Idle).ok();
-                        running = false;
-                    }
-                    Some(DebuggerCommand::SetBreakpoint(pc)) => {
-                        breakpoints.insert(pc);
-                    }
-                    Some(DebuggerCommand::UnsetBreakpoint(pc)) => {
-                        breakpoints.remove(&pc);
-                    }
-                    Some(DebuggerCommand::Step) => stepping = true,
-                    Some(DebuggerCommand::DumpVram) => log::info!("\n{}", emu.ppu().vram_dump()),
-                    None => (),
-                }
-
-                let mut vblank_ev = false;
-                if running || stepping {
-                    stepping = false;
-
-                    vblank_ev = match emu.step() {
-                        Err(e) => {
-                            log::error!("emu error: {}", e);
-                            emu_state_sig.try_send(EmuState::Error).ok();
-                            running = false;
-                            false
-                        }
-                        Ok(ev) => ev,
-                    };
-                }
-
-                if breakpoints.contains(&emu.cpu().read_pc()) {
-                    running = false;
-                }
-
-                if running && vblank_ev {
-                    let elapsed = SystemTime::now().duration_since(now).unwrap();
-                    now = SystemTime::now();
-
-                    if elapsed < frame_time {
-                        std::thread::sleep(frame_time - elapsed);
-                    }
-                }
-            }
-        });
+    pub fn remove_breakpoint(&mut self, pc: u16) {
+        self.breakpoints.remove(&pc);
     }
 
-    pub fn send_cmd(&self, cmd: DebuggerCommand) -> Option<()> {
-        self.cmd_ch.as_ref()?.send(cmd).unwrap();
-        Some(())
-    }
-
-    pub fn asm(&self) -> &AsmState {
-        &self.asm
-    }
-
-    pub fn emu_state(&self) -> Option<EmuState> {
-        self.emu_state.1.drain().last()
-    }
-
-    pub fn render_slot(&self) -> flume::Receiver<ScreenBuffer> {
-        self.render_slot.clone()
+    pub fn should_break(&self, pc: u16) -> bool {
+        self.breakpoints.contains(&pc)
     }
 
     pub fn disassemble(emu: Arc<RwLock<GameBoy>>) -> AsmState {

@@ -21,5 +21,8 @@ fn main() {
         boot_rom_filename,
         cart_rom_filename,
     )));
-    DebuggerApp::run(gb_emu);
+
+    let app = DebuggerApp::new();
+
+    app.run(gb_emu).unwrap();
 }

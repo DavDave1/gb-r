@@ -44,6 +44,10 @@ impl Bus {
         }
     }
 
+    pub fn step(&mut self, cycles: u8) -> Result<bool, GbError> {
+        self.ppu.step(cycles)
+    }
+
     pub fn reset(&mut self) {
         self.ppu.reset();
         self.io_registers = IORegisters::default();

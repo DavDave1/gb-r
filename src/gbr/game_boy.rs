@@ -2,6 +2,15 @@ use std::path::PathBuf;
 
 use crate::gbr::{bus::Bus, cpu::CPU, ppu::PPU, GbError};
 
+use super::{cpu::CpuState, io_registers::IORegisters, ppu::PpuState};
+
+#[derive(Default, Clone)]
+pub struct GbState {
+    pub cpu: CpuState,
+    pub io_registers: IORegisters,
+    pub ppu: PpuState,
+}
+
 pub struct GameBoy {
     cpu: CPU,
     bus: Bus,
@@ -9,18 +18,16 @@ pub struct GameBoy {
 
 impl GameBoy {
     pub fn new(boot_rom_filename: Option<PathBuf>, cart_rom_filename: Option<PathBuf>) -> Self {
-        let bus = Bus::new(boot_rom_filename, cart_rom_filename);
-
         GameBoy {
             cpu: CPU::new(),
-            bus,
+            bus: Bus::new(boot_rom_filename, cart_rom_filename),
         }
     }
 
     pub fn step(&mut self) -> Result<bool, GbError> {
         let cycles = self.cpu.step(&mut self.bus)?;
 
-        self.bus.ppu_mut().step(cycles)
+        self.bus.step(cycles)
     }
 
     pub fn reset(&mut self) {
@@ -38,5 +45,13 @@ impl GameBoy {
 
     pub fn ppu(&self) -> &PPU {
         &self.bus.ppu()
+    }
+
+    pub fn collect_state(&self) -> GbState {
+        GbState {
+            cpu: self.cpu.state(),
+            io_registers: self.bus.io_registers().clone(),
+            ppu: self.bus.ppu().state(),
+        }
     }
 }

@@ -7,4 +7,3 @@ mod io_registers_view;
 mod palette_view;
 mod tiles_view;
 mod ui;
-mod video_driver;
