@@ -120,56 +120,68 @@ impl Opcode {
     //
     // Note: For prefix instructions number of cycles is 0,
     // check CpOpcode to get correct cycles
-    fn cycles(&self) -> (u8, u8) {
+    fn cycles(&self, jumped: bool) -> u8 {
         match self {
-            Self::Nop => (1, 1),
-            Self::DecB => (1, 1),
-            Self::IncB => (1, 1),
-            Self::IncH => (1, 1),
-            Self::IncC => (1, 1),
-            Self::DecC => (1, 1),
-            Self::DecD => (1, 1),
-            Self::DecE => (1, 1),
-            Self::LdBd8 => (2, 2),
-            Self::LdCd8 => (2, 2),
-            Self::LdDd8 => (2, 2),
-            Self::LdEd8 => (2, 2),
-            Self::Stop => (1, 1),
-            Self::LdDEd16 => (3, 3),
-            Self::IncDE => (2, 2),
-            Self::RlA => (1, 1),
-            Self::LdADE => (2, 2),
-            Self::Jr => (3, 3),
-            Self::Jrnz => (2, 3),
-            Self::Jrz => (2, 3),
-            Self::LdHLd16 => (3, 3),
-            Self::LdHLincA => (2, 2),
-            Self::IncHL => (2, 2),
-            Self::LdLd8 => (2, 2),
-            Self::LdSPd16 => (3, 3),
-            Self::LdHLdecA => (2, 2),
-            Self::DecA => (2, 2),
-            Self::LdAd8 => (2, 2),
-            Self::LdCA => (1, 1),
-            Self::LdDA => (1, 1),
-            Self::LdHA => (1, 1),
-            Self::LdHLA => (2, 2),
-            Self::LdAE => (1, 1),
-            Self::LdAH => (1, 1),
-            Self::AddAB => (1, 1),
-            Self::SubAB => (1, 1),
-            Self::SubAL => (1, 1),
-            Self::XorA => (1, 1),
-            Self::PopBC => (3, 3),
-            Self::PushBC => (4, 4),
-            Self::Ret => (4, 4),
-            Self::Prefix => (0, 0),
-            Self::Calla16 => (6, 6),
-            Self::Ldha8A => (3, 3),
-            Self::Lda16A => (4, 4),
-            Self::LdhCA => (2, 2),
-            Self::LdhAa8 => (3, 3),
-            Self::Cpd8 => (2, 2),
+            Self::Nop => 1,
+            Self::DecB => 1,
+            Self::IncB => 1,
+            Self::IncH => 1,
+            Self::IncC => 1,
+            Self::DecC => 1,
+            Self::DecD => 1,
+            Self::DecE => 1,
+            Self::LdBd8 => 2,
+            Self::LdCd8 => 2,
+            Self::LdDd8 => 2,
+            Self::LdEd8 => 2,
+            Self::Stop => 1,
+            Self::LdDEd16 => 3,
+            Self::IncDE => 2,
+            Self::RlA => 1,
+            Self::LdADE => 2,
+            Self::Jr => 3,
+            Self::Jrnz => {
+                if jumped {
+                    3
+                } else {
+                    2
+                }
+            }
+            Self::Jrz => {
+                if jumped {
+                    3
+                } else {
+                    2
+                }
+            }
+            Self::LdHLd16 => 3,
+            Self::LdHLincA => 2,
+            Self::IncHL => 2,
+            Self::LdLd8 => 2,
+            Self::LdSPd16 => 3,
+            Self::LdHLdecA => 2,
+            Self::DecA => 2,
+            Self::LdAd8 => 2,
+            Self::LdCA => 1,
+            Self::LdDA => 1,
+            Self::LdHA => 1,
+            Self::LdHLA => 2,
+            Self::LdAE => 1,
+            Self::LdAH => 1,
+            Self::AddAB => 1,
+            Self::SubAB => 1,
+            Self::SubAL => 1,
+            Self::XorA => 1,
+            Self::PopBC => 3,
+            Self::PushBC => 4,
+            Self::Ret => 4,
+            Self::Prefix => 0,
+            Self::Calla16 => 6,
+            Self::Ldha8A => 3,
+            Self::Lda16A => 4,
+            Self::LdhCA => 2,
+            Self::LdhAa8 => 3,
+            Self::Cpd8 => 2,
         }
     }
 }
@@ -402,8 +414,8 @@ impl Display for CallMode {
 
 pub struct Instruction {
     instr: InstructionType,
-    length: u8,
-    cycles: (u8, u8),
+    opcode: Opcode,
+    cb_opcode: Option<CbOpcode>,
 }
 
 impl Instruction {
@@ -419,6 +431,7 @@ impl Instruction {
         let word = LittleEndian::read_u16(&memory[1..3]);
 
         let opcode = Opcode::from_u8(memory[0]).ok_or(GbError::UnknownInstruction(memory[0]))?;
+        let mut cb_opcode = None;
         let instr = match opcode {
             Opcode::Nop => Nop,
             Opcode::Stop => Stop,
@@ -468,7 +481,9 @@ impl Instruction {
             Opcode::Calla16 => Call(CallMode::Absolute(word)),
             Opcode::Ret => Ret,
             Opcode::Prefix => {
-                match CbOpcode::from_u8(byte).ok_or(GbError::UnknownCbInstruction(byte))? {
+                cb_opcode =
+                    Some(CbOpcode::from_u8(byte).ok_or(GbError::UnknownCbInstruction(byte))?);
+                match cb_opcode.as_ref().unwrap() {
                     CbOpcode::RlC => Arithmetic(RlC(C, false)),
                     CbOpcode::SlaB => Arithmetic(Sla(B)),
                     CbOpcode::Bit7H => Arithmetic(TestBit(H, 7)),
@@ -476,33 +491,26 @@ impl Instruction {
             }
         };
 
-        let cycles = match opcode {
-            Opcode::Prefix => {
-                let cycles = CbOpcode::from_u8(byte)
-                    .ok_or(GbError::UnknownCbInstruction(byte))?
-                    .cycles();
-                (cycles, cycles)
-            }
-            _ => opcode.cycles(),
-        };
-
         Ok(Self {
             instr,
-            length: opcode.length(),
-            cycles: cycles,
+            opcode,
+            cb_opcode,
         })
     }
 
     pub fn len(&self) -> u8 {
-        self.length
+        self.opcode.length()
     }
 
     pub fn instr_type(&self) -> &InstructionType {
         &self.instr
     }
 
-    pub fn cycles(&self) -> (u8, u8) {
-        self.cycles
+    pub fn cycles(&self, jumped: bool) -> u8 {
+        match self.cb_opcode.as_ref() {
+            Some(op) => op.cycles(),
+            None => self.opcode.cycles(jumped),
+        }
     }
 }
 

@@ -336,13 +336,7 @@ impl CPU {
             InstructionType::Ret => self.reg_pc = self.pop_stack(bus)?,
         }
 
-        let cycles = if jumped {
-            instr.cycles().1
-        } else {
-            instr.cycles().0
-        };
-
-        Ok(cycles)
+        Ok(instr.cycles(jumped))
     }
 
     pub fn state(&self) -> CpuState {
