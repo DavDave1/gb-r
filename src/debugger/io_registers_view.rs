@@ -10,26 +10,4 @@ pub fn show(io_regs: &IORegisters, ui: &mut egui::Ui) {
         "Serial control: {:#010b}",
         io_regs.serial_control()
     ));
-
-    ui.label(format!("Sound enable: {:#010b}", io_regs.sound_enable()));
-
-    ui.label(format!(
-        "Sound ch1 wave pattern len: {:#010b}",
-        io_regs.sound_ch1_wave_pattern_length()
-    ));
-
-    ui.label(format!(
-        "Sound ch1 volume envelope: {:#010b}",
-        io_regs.sound_ch1_volume_envelope()
-    ));
-
-    ui.label(format!(
-        "Sound output terminal selection: {:#010b}",
-        io_regs.sound_output_terminal_selection()
-    ));
-
-    ui.label(format!(
-        "Sound channel volume control: {:#010b}",
-        io_regs.sound_channel_volume_control()
-    ));
 }

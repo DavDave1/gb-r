@@ -25,8 +25,11 @@ const NOT_USABLE_RAM_START: u16 = 0xFEA0;
 const NOT_USABLE_RAM_END: u16 = 0xFEFF;
 pub const IO_REGISTERS_START: u16 = 0xFF00;
 const IO_REGISTERS_END: u16 = 0xFF7F;
-pub const PPU_REGISTERS_START: u16 = 0x040;
-pub const PPU_REGISTERS_END: u16 = 0x004B;
+pub const PPU_REGISTERS_START: u16 = 0xFF40;
+pub const PPU_REGISTERS_END: u16 = 0xFF4B;
+
+pub const APU_REGISTERS_START: u16 = 0xFF10;
+pub const APU_REGISTERS_END: u16 = 0xFF3F;
 
 const HIGH_RAM_START: u16 = 0xFF80;
 const HIGH_RAM_END: u16 = 0xFFFE;
@@ -44,6 +47,8 @@ pub enum MappedAddress {
     //  EchoRam(u16),
     SpriteAttributeTable(u16),
     //  NotUsable(u16),
+    ApuRegisters(u16),
+    PpuRegisters(u16),
     IORegisters(u16),
     HighRam(u16),
     InterruptEnableRegister,
@@ -76,6 +81,12 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
             "access to not usable RAM RAM {:#06X}",
             addr
         ))),
+        APU_REGISTERS_START..=APU_REGISTERS_END => {
+            Ok(MappedAddress::ApuRegisters(addr - IO_REGISTERS_START))
+        }
+        PPU_REGISTERS_START..=PPU_REGISTERS_END => {
+            Ok(MappedAddress::PpuRegisters(addr - IO_REGISTERS_START))
+        }
         IO_REGISTERS_START..=IO_REGISTERS_END => {
             Ok(MappedAddress::IORegisters(addr - IO_REGISTERS_START))
         }

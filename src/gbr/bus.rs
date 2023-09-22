@@ -2,8 +2,8 @@ use std::{fs, path::PathBuf};
 
 use byteorder::{ByteOrder, LittleEndian};
 
-use crate::gbr::{
-    instruction::Instruction, io_registers::IORegisters, memory_map::*, ppu::PPU, GbError,
+use super::{
+    apu::APU, instruction::Instruction, io_registers::IORegisters, memory_map::*, ppu::PPU, GbError,
 };
 
 pub struct Bus {
@@ -13,6 +13,7 @@ pub struct Bus {
     hram: Box<[u8]>,
     io_registers: IORegisters,
     ppu: PPU,
+    apu: APU,
 }
 
 impl Bus {
@@ -41,10 +42,12 @@ impl Bus {
             hram: vec![0; HIGH_RAM_SIZE].into_boxed_slice(),
             io_registers: IORegisters::default(),
             ppu: PPU::new(),
+            apu: APU::new(),
         }
     }
 
     pub fn step(&mut self, cycles: u8) -> Result<bool, GbError> {
+        self.apu.step(cycles)?;
         self.ppu.step(cycles)
     }
 
@@ -55,10 +58,6 @@ impl Bus {
 
     pub fn ppu(&self) -> &PPU {
         &self.ppu
-    }
-
-    pub fn ppu_mut(&mut self) -> &mut PPU {
-        &mut self.ppu
     }
 
     pub fn io_registers(&self) -> &IORegisters {
@@ -109,10 +108,9 @@ impl Bus {
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
-            MappedAddress::IORegisters(addr) => match addr {
-                PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.read_reg(addr),
-                _ => self.io_registers.read(addr),
-            },
+            MappedAddress::ApuRegisters(addr) => self.apu.read_reg(addr),
+            MappedAddress::PpuRegisters(addr) => self.ppu.read_reg(addr),
+            MappedAddress::IORegisters(addr) => self.io_registers.read(addr),
             MappedAddress::HighRam(addr) => Ok(self.hram[addr as usize]),
             MappedAddress::InterruptEnableRegister => Err(GbError::Unimplemented(
                 "reading interrupr enable register".into(),
@@ -139,10 +137,9 @@ impl Bus {
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "writing to sprite attribute table".into(),
             )),
-            MappedAddress::IORegisters(addr) => match addr {
-                PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.write_reg(addr, value),
-                _ => self.io_registers.write(addr, value),
-            },
+            MappedAddress::ApuRegisters(addr) => self.apu.write_reg(addr, value),
+            MappedAddress::PpuRegisters(addr) => self.ppu.write_reg(addr, value),
+            MappedAddress::IORegisters(addr) => self.io_registers.write(addr, value),
             MappedAddress::HighRam(addr) => {
                 self.hram[addr as usize] = value;
                 Ok(())
@@ -177,6 +174,12 @@ impl Bus {
             )),
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
+            )),
+            MappedAddress::ApuRegisters(_addr) => Err(GbError::Unimplemented(
+                "read word from APU registers".into(),
+            )),
+            MappedAddress::PpuRegisters(_addr) => Err(GbError::Unimplemented(
+                "read word from PPU registers".into(),
             )),
             MappedAddress::IORegisters(_addr) => {
                 Err(GbError::Unimplemented("reading IO registers".into()))
