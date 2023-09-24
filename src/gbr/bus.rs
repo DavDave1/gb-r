@@ -56,6 +56,7 @@ impl Bus {
     }
 
     pub fn step(&mut self, cycles: u8) -> Result<bool, GbError> {
+        self.timer.step(cycles, &mut self.ir_handler);
         self.apu.step(cycles)?;
         self.ppu.step(cycles)
     }
