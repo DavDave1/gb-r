@@ -3,8 +3,11 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::gbr::game_boy::{GameBoy, GbState};
 use crate::gbr::instruction::Instruction;
+use crate::gbr::{
+    game_boy::{GameBoy, GbState},
+    memory_map::BOOT_ROM_SIZE,
+};
 
 pub type AsmState = Vec<(u16, Option<Instruction>)>;
 
@@ -50,7 +53,7 @@ impl Debugger {
 
         let emu = emu.read().unwrap();
 
-        while pc < 0xFB {
+        while pc < BOOT_ROM_SIZE as u16 {
             let instruction = match emu.bus().fetch_instruction(pc) {
                 Ok(instr) => instr,
                 Err(e) => {

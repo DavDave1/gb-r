@@ -3,7 +3,8 @@ use std::{fs, path::PathBuf};
 use byteorder::{ByteOrder, LittleEndian};
 
 use super::{
-    apu::APU, instruction::Instruction, io_registers::IORegisters, memory_map::*, ppu::PPU, GbError,
+    apu::APU, instruction::Instruction, interrupts::InterruptHandler, io_registers::IORegisters,
+    memory_map::*, ppu::PPU, timer::Timer, GbError,
 };
 
 pub struct Bus {
@@ -11,9 +12,13 @@ pub struct Bus {
     boot_rom: Box<[u8]>,
     cart_rom: Box<[u8]>,
     hram: Box<[u8]>,
+    wram: Box<[u8]>,
+    wram_acv_bank: Box<[u8]>,
     io_registers: IORegisters,
     ppu: PPU,
     apu: APU,
+    ir_handler: InterruptHandler,
+    timer: Timer,
 }
 
 impl Bus {
@@ -40,9 +45,13 @@ impl Bus {
             boot_rom: boot_rom.into_boxed_slice(),
             cart_rom: cart_rom.into_boxed_slice(),
             hram: vec![0; HIGH_RAM_SIZE].into_boxed_slice(),
+            wram: vec![0; WORK_RAM_BANK0_SIZE].into_boxed_slice(),
+            wram_acv_bank: vec![0; WORK_RAM_ACTIVE_BANK_SIZE].into_boxed_slice(),
             io_registers: IORegisters::default(),
             ppu: PPU::new(),
             apu: APU::new(),
+            ir_handler: InterruptHandler::default(),
+            timer: Timer::default(),
         }
     }
 
@@ -64,19 +73,27 @@ impl Bus {
         &self.io_registers
     }
 
+    pub fn ir_handler(&self) -> &InterruptHandler {
+        &self.ir_handler
+    }
+
+    pub fn ir_handler_mut(&mut self) -> &mut InterruptHandler {
+        &mut self.ir_handler
+    }
+
     pub fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError> {
         match map_address(addr)? {
             MappedAddress::RomBank0(addr) => {
                 if self.boot_rom_lock {
-                    Instruction::decode(&self.boot_rom[addr as usize..addr as usize + 3])
+                    let len = Instruction::peek_len(self.boot_rom[addr as usize])? as usize;
+                    Instruction::decode(&self.boot_rom[addr as usize..addr as usize + len])
                 } else {
-                    Err(GbError::Unimplemented(
-                        "fetching instruction from cart".into(),
-                    ))
+                    let len = Instruction::peek_len(self.cart_rom[addr as usize])? as usize;
+                    Instruction::decode(&self.cart_rom[addr as usize..addr as usize + len])
                 }
             }
             _ => Err(GbError::Unimplemented(
-                "fetching instruction outside form bank 0".into(),
+                "fetching instruction outside bank 0".into(),
             )),
         }
     }
@@ -99,55 +116,62 @@ impl Bus {
             MappedAddress::ExternalRam(_addr) => {
                 Err(GbError::Unimplemented("reading from external ram".into()))
             }
-            MappedAddress::WorkRamBank0(_addr) => Err(GbError::Unimplemented(
-                "reading from work ram bank 0".into(),
-            )),
-            MappedAddress::WorkRamActiveBank(_addr) => Err(GbError::Unimplemented(
-                "reading from work ram active bank".into(),
-            )),
+            MappedAddress::WorkRamBank0(addr) => Ok(self.wram[addr as usize]),
+            MappedAddress::WorkRamActiveBank(addr) => Ok(self.wram_acv_bank[addr as usize]),
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
+            MappedAddress::TimerRegisters(addr) => self.timer.read_reg(addr),
             MappedAddress::ApuRegisters(addr) => self.apu.read_reg(addr),
             MappedAddress::PpuRegisters(addr) => self.ppu.read_reg(addr),
+            MappedAddress::BootRomLockRegister => Err(GbError::IllegalOp(
+                "reading from boot rom lock register".into(),
+            )),
             MappedAddress::IORegisters(addr) => self.io_registers.read(addr),
             MappedAddress::HighRam(addr) => Ok(self.hram[addr as usize]),
+            MappedAddress::InterruptFlagRegister => Err(GbError::Unimplemented(
+                "reading interrupt flag register".into(),
+            )),
             MappedAddress::InterruptEnableRegister => Err(GbError::Unimplemented(
-                "reading interrupr enable register".into(),
+                "reading interrupt enable register".into(),
             )),
         }
     }
 
     pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match map_address(addr)? {
-            MappedAddress::RomBank0(_addr) => Err(GbError::IllegalOp("write to rom bank 0".into())),
+            MappedAddress::RomBank0(_addr) => {
+                return Err(GbError::IllegalOp("write to rom bank 0".into()));
+            }
             MappedAddress::RomActiveBank(_addr) => {
-                Err(GbError::IllegalOp("write to rom active bank".into()))
+                return Err(GbError::IllegalOp("write to rom active bank".into()));
             }
-            MappedAddress::VideoRam(addr) => self.ppu.write_byte(addr, value),
+            MappedAddress::VideoRam(addr) => self.ppu.write_byte(addr, value)?,
             MappedAddress::ExternalRam(_addr) => {
-                Err(GbError::Unimplemented("writing to external ram".into()))
+                return Err(GbError::Unimplemented("writing to external ram".into()));
             }
-            MappedAddress::WorkRamBank0(_addr) => {
-                Err(GbError::Unimplemented("writing to work ram 0".into()))
+            MappedAddress::WorkRamBank0(addr) => {
+                self.wram[addr as usize] = value;
             }
-            MappedAddress::WorkRamActiveBank(_addr) => Err(GbError::Unimplemented(
-                "writing to work ram active bank".into(),
-            )),
-            MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
-                "writing to sprite attribute table".into(),
-            )),
-            MappedAddress::ApuRegisters(addr) => self.apu.write_reg(addr, value),
-            MappedAddress::PpuRegisters(addr) => self.ppu.write_reg(addr, value),
-            MappedAddress::IORegisters(addr) => self.io_registers.write(addr, value),
-            MappedAddress::HighRam(addr) => {
-                self.hram[addr as usize] = value;
-                Ok(())
+            MappedAddress::WorkRamActiveBank(addr) => {
+                self.wram_acv_bank[addr as usize] = value;
             }
-            MappedAddress::InterruptEnableRegister => Err(GbError::Unimplemented(
-                "writing interrubt enable register".into(),
-            )),
+            MappedAddress::SpriteAttributeTable(_addr) => {
+                return Err(GbError::Unimplemented(
+                    "writing to sprite attribute table".into(),
+                ));
+            }
+            MappedAddress::TimerRegisters(addr) => self.timer.write_reg(addr, value)?,
+            MappedAddress::ApuRegisters(addr) => self.apu.write_reg(addr, value)?,
+            MappedAddress::PpuRegisters(addr) => self.ppu.write_reg(addr, value)?,
+            MappedAddress::BootRomLockRegister => self.boot_rom_lock = false,
+            MappedAddress::IORegisters(addr) => self.io_registers.write(addr, value)?,
+            MappedAddress::HighRam(addr) => self.hram[addr as usize] = value,
+            MappedAddress::InterruptFlagRegister => self.ir_handler.write_if(value),
+            MappedAddress::InterruptEnableRegister => self.ir_handler.write_ie(value),
         }
+
+        Ok(())
     }
 
     pub fn read_word(&self, addr: u16) -> Result<u16, GbError> {
@@ -175,17 +199,26 @@ impl Bus {
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
-            MappedAddress::ApuRegisters(_addr) => Err(GbError::Unimplemented(
-                "read word from APU registers".into(),
-            )),
-            MappedAddress::PpuRegisters(_addr) => Err(GbError::Unimplemented(
-                "read word from PPU registers".into(),
+            MappedAddress::TimerRegisters(_addr) => {
+                Err(GbError::IllegalOp("read word from Timer registers".into()))
+            }
+            MappedAddress::ApuRegisters(_addr) => {
+                Err(GbError::IllegalOp("read word from APU registers".into()))
+            }
+            MappedAddress::PpuRegisters(_addr) => {
+                Err(GbError::IllegalOp("read word from PPU registers".into()))
+            }
+            MappedAddress::BootRomLockRegister => Err(GbError::IllegalOp(
+                "reading from boot rom lock register".into(),
             )),
             MappedAddress::IORegisters(_addr) => {
                 Err(GbError::Unimplemented("reading IO registers".into()))
             }
             MappedAddress::HighRam(addr) => Ok(LittleEndian::read_u16(&self.hram[addr as usize..])),
-            MappedAddress::InterruptEnableRegister => Err(GbError::Unimplemented(
+            MappedAddress::InterruptFlagRegister => {
+                Err(GbError::IllegalOp("reading interrupt flag register".into()))
+            }
+            MappedAddress::InterruptEnableRegister => Err(GbError::IllegalOp(
                 "reading interrupt enable register".into(),
             )),
         }

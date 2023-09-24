@@ -5,8 +5,8 @@ use crate::gbr::bus::Bus;
 use crate::gbr::GbError;
 
 use super::instruction::{
-    CallMode, DestType, DoubleRegType, InstructionType, JumpCondition, PostStore, SingleRegType,
-    SourceType,
+    CallMode, DestType, DoubleRegType, InstructionType, JumpCondition, JumpType, PostStore,
+    SingleRegType, SourceType,
 };
 
 #[derive(Default, Clone)]
@@ -232,13 +232,17 @@ impl CPU {
         }
     }
 
-    fn jump_relative(&mut self, condition: &JumpCondition, offset: i8) -> bool {
+    fn jump(&mut self, condition: &JumpCondition, jump_type: &JumpType) -> bool {
         if self.test_condition(condition) {
-            // TODO: find a better way to to this
-            if offset < 0 {
-                self.reg_pc -= offset.abs() as u16;
-            } else {
-                self.reg_pc += offset as u16;
+            match *jump_type {
+                JumpType::Relative(offset) => {
+                    if offset < 0 {
+                        self.reg_pc -= offset.abs() as u16;
+                    } else {
+                        self.reg_pc += offset as u16;
+                    }
+                }
+                JumpType::Absolute(addr) => self.reg_pc = addr,
             }
 
             return true;
@@ -316,9 +320,10 @@ impl CPU {
         match instr.instr_type() {
             InstructionType::Nop => (),
             InstructionType::Stop => self.low_power_mode = true,
-            InstructionType::Arithmetic(ar_type) => ALU::exec(self, ar_type),
-            InstructionType::JumpRelative(condition, offset) => {
-                jumped = self.jump_relative(condition, *offset);
+            InstructionType::MasterInterrupt(enable) => bus.ir_handler_mut().set_ime(*enable),
+            InstructionType::Arithmetic(ar_type) => ALU::exec(ar_type, self, bus)?,
+            InstructionType::Jump(condition, jump_type) => {
+                jumped = self.jump(condition, jump_type);
             }
             InstructionType::Load8(reg, source) => self.load8(bus, reg, source)?,
             InstructionType::Load16(reg, value) => self.write_double_reg(reg, *value),

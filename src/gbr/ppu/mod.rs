@@ -56,13 +56,20 @@ pub type ScreenBuffer = Vec<u8>;
 pub type TileList = Vec<Tile>;
 
 #[derive(Default, Clone)]
+pub struct Point {
+    pub x: u8,
+    pub y: u8,
+}
+
+#[derive(Default, Clone)]
 pub struct PpuState {
     pub lcd_control: LcdControlRegister,
     pub lcd_status: LcsStatusRegister,
     pub bg_palette: BackgroundPalette,
     pub ly: u8,
     pub lyc: u8,
-    pub viewport: (u8, u8),
+    pub viewport: Point,
+    pub win_pos: Point,
     pub tiles_list: Vec<Tile>,
 }
 
@@ -73,7 +80,8 @@ pub struct PPU {
     bg_palette: BackgroundPalette,
     ly: u8,
     lyc: u8,
-    viewport: (u8, u8),
+    viewport: Point,
+    win_pos: Point,
     tiles_list: Vec<Tile>,
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
     dots: u16,
@@ -89,7 +97,8 @@ impl PPU {
             bg_palette: Default::default(),
             ly: 0,
             lyc: 0,
-            viewport: (0, 0),
+            viewport: Point::default(),
+            win_pos: Point::default(),
             tiles_list: vec![Tile::default(); 3 * TILE_BLOCK_SIZE],
             render_ch: flume::bounded(1),
             dots: 0,
@@ -104,7 +113,8 @@ impl PPU {
         self.bg_palette = Default::default();
         self.ly = 0;
         self.lyc = 0;
-        self.viewport = (0, 0);
+        self.viewport = Point::default();
+        self.win_pos = Point::default();
         self.tiles_list.fill(Tile::default());
         self.dots = 0;
         self.pixel_processor = PixelProcessor::new();
@@ -210,8 +220,8 @@ impl PPU {
         match addr {
             0x0040 => Ok(self.lcd_control.into()),
             0x0041 => Ok(self.lcd_status.into()),
-            0x0042 => Ok(self.viewport.1),
-            0x0043 => Ok(self.viewport.0),
+            0x0042 => Ok(self.viewport.y),
+            0x0043 => Ok(self.viewport.x),
             0x0044 => Ok(self.ly),
             0x0045 => Ok(self.lyc),
             0x0047 => Ok(self.bg_palette.into()),
@@ -224,18 +234,24 @@ impl PPU {
 
     pub fn write_reg(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match addr {
-            0x0040 => Ok(self.lcd_control = value.into()),
-            0x0041 => Ok(self.lcd_status = value.into()),
-            0x0042 => Ok(self.viewport.1 = value),
-            0x0043 => Ok(self.viewport.0 = value),
-            0x0044 => Err(GbError::IllegalOp("Cannot write to LY register".into())),
-            0x0045 => Ok(self.lyc = value),
-            0x0047 => Ok(self.bg_palette = value.into()),
-            _ => Err(GbError::IllegalOp(format!(
-                "Write to invalid PPU reg {:#06X}",
-                addr
-            ))),
+            0x0040 => self.lcd_control = value.into(),
+            0x0041 => self.lcd_status = value.into(),
+            0x0042 => self.viewport.y = value,
+            0x0043 => self.viewport.x = value,
+            0x0044 => return Err(GbError::IllegalOp("Cannot write to LY register".into())),
+            0x0045 => self.lyc = value,
+            0x0047 => self.bg_palette = value.into(),
+            0x004A => self.win_pos.y = value,
+            0x004B => self.win_pos.x = value,
+            _ => {
+                return Err(GbError::IllegalOp(format!(
+                    "Write to invalid PPU reg {:#06X}",
+                    addr
+                )));
+            }
         }
+
+        Ok(())
     }
 
     pub fn render_watch(&self) -> flume::Receiver<ScreenBuffer> {
@@ -277,7 +293,8 @@ impl PPU {
             bg_palette: self.bg_palette,
             ly: self.ly,
             lyc: self.lyc,
-            viewport: self.viewport,
+            viewport: self.viewport.clone(),
+            win_pos: self.win_pos.clone(),
             tiles_list: self.tiles_list.clone(),
         }
     }

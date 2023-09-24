@@ -16,10 +16,10 @@ use crate::gbr::game_boy::GbState;
 
 use super::debugger::{AsmState, DebuggerCommand};
 use super::debugger_app::EmuState;
-use super::io_registers_view;
 use super::palette_view::PaletteView;
 use super::tiles_view::TilesView;
 use super::{asm_view, cpu_view};
+use super::{interrupts_view, io_registers_view};
 
 struct UiState {
     show_asm_view: bool,
@@ -144,6 +144,8 @@ impl UiState {
                     ui.separator();
                     io_registers_view::show(&self.gb_state.io_registers, ui);
                     ui.separator();
+                    interrupts_view::show(&mut self.gb_state.ir_handler, ui);
+                    ui.separator();
                     asm_view::show(
                         &self.cmd_sig,
                         &self.asm,
@@ -172,10 +174,14 @@ impl UiState {
                     ui.label(format!("{}", self.gb_state.ppu.lcd_status));
                     ui.heading("Viewport");
                     ui.label(format!(
-                        "X: {}, Y: {}, LY: {}",
-                        self.gb_state.ppu.viewport.0,
-                        self.gb_state.ppu.viewport.1,
+                        "Viewport X, Y: ({}, {}), LY: {}",
+                        self.gb_state.ppu.viewport.x,
+                        self.gb_state.ppu.viewport.y,
                         self.gb_state.ppu.ly
+                    ));
+                    ui.label(format!(
+                        "Win X, Y: ({}, {})",
+                        self.gb_state.ppu.win_pos.x, self.gb_state.ppu.win_pos.y
                     ));
                     ui.separator();
                     ui.horizontal_wrapped(|ui| {

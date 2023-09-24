@@ -1,15 +1,22 @@
-use crate::gbr::{cpu::CPU, instruction::CompareType};
-
-use super::instruction::ArithmeticType;
+use super::{
+    bus::Bus,
+    cpu::CPU,
+    instruction::{ArithmeticType, OperandType},
+    GbError,
+};
 
 #[derive(Default)]
 pub struct ALU;
 
 impl ALU {
-    pub fn exec(cpu: &mut CPU, op: &ArithmeticType) {
+    pub fn exec(op: &ArithmeticType, cpu: &mut CPU, bus: &Bus) -> Result<(), GbError> {
         match op {
             ArithmeticType::Add(dst, src) => {
-                let res = ALU::add(cpu, cpu.read_single_reg(dst), cpu.read_single_reg(src));
+                let res = ALU::add(
+                    cpu,
+                    cpu.read_single_reg(dst),
+                    ALU::val_from_operand(src, cpu, bus)?,
+                );
                 cpu.write_single_reg(dst, res);
             }
             ArithmeticType::Sub(dst, src) => {
@@ -25,13 +32,12 @@ impl ALU {
                 let res = ALU::dec(cpu, cpu.read_single_reg(dst));
                 cpu.write_single_reg(dst, res);
             }
-            ArithmeticType::Cmp(dst, com_type) => {
-                let cmp_val = match com_type {
-                    CompareType::Imm(v) => *v,
-                    CompareType::Reg(src) => cpu.read_single_reg(src),
-                };
-
-                ALU::cp(cpu, cpu.read_single_reg(dst), cmp_val);
+            ArithmeticType::Cmp(dst, src) => {
+                ALU::cp(
+                    cpu,
+                    cpu.read_single_reg(dst),
+                    ALU::val_from_operand(src, cpu, bus)?,
+                );
             }
             ArithmeticType::RlC(reg, clear_z_flag) => {
                 let res = ALU::rlc(cpu, cpu.read_single_reg(reg));
@@ -61,6 +67,18 @@ impl ALU {
                 cpu.write_single_reg(dst, res);
             }
         }
+
+        Ok(())
+    }
+
+    fn val_from_operand(operand_type: &OperandType, cpu: &CPU, bus: &Bus) -> Result<u8, GbError> {
+        let cmp_val = match operand_type {
+            OperandType::Imm(v) => *v,
+            OperandType::Reg(src) => cpu.read_single_reg(src),
+            OperandType::RegAddr(src) => bus.read_byte(cpu.read_double_reg(src))?,
+        };
+
+        Ok(cmp_val)
     }
 
     pub fn dec(cpu: &mut CPU, value: u8) -> u8 {

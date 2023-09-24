@@ -13,29 +13,43 @@ pub const VIDEO_RAM_SIZE: usize = (VIDEO_RAM_END - VIDEO_RAM_START + 1) as usize
 
 const EXTERNAL_RAM_START: u16 = 0xA000;
 const EXTERNAL_RAM_END: u16 = 0xBFFF;
+
 const WORK_RAM_BANK0_START: u16 = 0xC000;
 const WORK_RAM_BANK0_END: u16 = 0xCFFF;
+pub const WORK_RAM_BANK0_SIZE: usize = (WORK_RAM_BANK0_END - WORK_RAM_BANK0_START + 1) as usize;
+
 const WORK_RAM_ACTIVE_BANK_START: u16 = 0xD000;
 const WORK_RAM_ACTIVE_BANK_END: u16 = 0xDFFF;
+pub const WORK_RAM_ACTIVE_BANK_SIZE: usize =
+    (WORK_RAM_ACTIVE_BANK_END - WORK_RAM_ACTIVE_BANK_START + 1) as usize;
+
 const ECHO_RAM_START: u16 = 0xE000;
 const ECHO_RAM_END: u16 = 0xFDFF;
 const SPRITE_ATTRIBUTE_TABLE_START: u16 = 0xFE00;
 const SPRITE_ATTRIBUTE_TABLE_END: u16 = 0xFE9F;
 const NOT_USABLE_RAM_START: u16 = 0xFEA0;
 const NOT_USABLE_RAM_END: u16 = 0xFEFF;
+
 pub const IO_REGISTERS_START: u16 = 0xFF00;
 const IO_REGISTERS_END: u16 = 0xFF7F;
-pub const PPU_REGISTERS_START: u16 = 0xFF40;
-pub const PPU_REGISTERS_END: u16 = 0xFF4B;
+
+pub const TIMER_REGISTERS_START: u16 = 0xFF04;
+pub const TIMER_REGISTERS_END: u16 = 0xFF07;
 
 pub const APU_REGISTERS_START: u16 = 0xFF10;
 pub const APU_REGISTERS_END: u16 = 0xFF3F;
 
+pub const PPU_REGISTERS_START: u16 = 0xFF40;
+pub const PPU_REGISTERS_END: u16 = 0xFF4B;
+
+const BOOT_ROM_LOCK_REGISTER: u16 = 0xFF50;
+
+const INTERRUPTS_FLAG_REGISTER: u16 = 0xFF0F;
+const INTERRUPTS_ENABLE_REGISTER: u16 = 0xFFFF;
+
 const HIGH_RAM_START: u16 = 0xFF80;
 const HIGH_RAM_END: u16 = 0xFFFE;
 pub const HIGH_RAM_SIZE: usize = (HIGH_RAM_END - HIGH_RAM_START + 1) as usize;
-
-const INTERRUPTS_ENABLE_REGISTER: u16 = 0xFFFF;
 
 pub enum MappedAddress {
     RomBank0(u16),
@@ -47,10 +61,13 @@ pub enum MappedAddress {
     //  EchoRam(u16),
     SpriteAttributeTable(u16),
     //  NotUsable(u16),
+    TimerRegisters(u16),
     ApuRegisters(u16),
     PpuRegisters(u16),
+    BootRomLockRegister,
     IORegisters(u16),
     HighRam(u16),
+    InterruptFlagRegister,
     InterruptEnableRegister,
 }
 
@@ -65,7 +82,7 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
             Ok(MappedAddress::ExternalRam(addr - EXTERNAL_RAM_START))
         }
         WORK_RAM_BANK0_START..=WORK_RAM_BANK0_END => {
-            Ok(MappedAddress::WorkRamBank0(addr - WORK_RAM_BANK0_END))
+            Ok(MappedAddress::WorkRamBank0(addr - WORK_RAM_BANK0_START))
         }
         WORK_RAM_ACTIVE_BANK_START..=WORK_RAM_ACTIVE_BANK_END => Ok(
             MappedAddress::WorkRamActiveBank(addr - WORK_RAM_ACTIVE_BANK_START),
@@ -81,12 +98,17 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
             "access to not usable RAM RAM {:#06X}",
             addr
         ))),
+        TIMER_REGISTERS_START..=TIMER_REGISTERS_END => {
+            Ok(MappedAddress::TimerRegisters(addr - IO_REGISTERS_START))
+        }
         APU_REGISTERS_START..=APU_REGISTERS_END => {
             Ok(MappedAddress::ApuRegisters(addr - IO_REGISTERS_START))
         }
         PPU_REGISTERS_START..=PPU_REGISTERS_END => {
             Ok(MappedAddress::PpuRegisters(addr - IO_REGISTERS_START))
         }
+        BOOT_ROM_LOCK_REGISTER => Ok(MappedAddress::BootRomLockRegister),
+        INTERRUPTS_FLAG_REGISTER => Ok(MappedAddress::InterruptFlagRegister),
         IO_REGISTERS_START..=IO_REGISTERS_END => {
             Ok(MappedAddress::IORegisters(addr - IO_REGISTERS_START))
         }

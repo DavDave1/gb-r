@@ -4,7 +4,8 @@ use super::{
     background_palette::BackgroundPalette,
     lcd_control_register::LcdControlRegister,
     tile::{Tile, TILE_COLOR_ID},
-    MODE_2_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_BLOCK1_START, TILE_BLOCK2_START, TILE_DATA_SIZE,
+    Point, MODE_2_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_BLOCK1_START, TILE_BLOCK2_START,
+    TILE_DATA_SIZE,
 };
 
 #[derive(PartialEq)]
@@ -47,7 +48,7 @@ impl PixelProcessor {
         &mut self,
         ly: u8,
         dots: u16,
-        viewport: &(u8, u8),
+        viewport: &Point,
         lcd_ctrl: &LcdControlRegister,
         vram: &[u8],
         bg_palette: &BackgroundPalette,
@@ -60,8 +61,8 @@ impl PixelProcessor {
         self.curr_tile_line = 0;
         self.curr_tile_msb = 0;
         self.curr_tile_lsb = 0;
-        self.scroll_x = viewport.0;
-        self.scroll_y = viewport.1;
+        self.scroll_x = viewport.x;
+        self.scroll_y = viewport.y;
 
         self.process(ly, dots, viewport, lcd_ctrl, vram, bg_palette);
     }
@@ -74,7 +75,7 @@ impl PixelProcessor {
         &mut self,
         ly: u8,
         dots: u16,
-        viewport: &(u8, u8),
+        viewport: &Point,
         lcd_ctrl: &LcdControlRegister,
         vram: &[u8],
         bg_palette: &BackgroundPalette,
@@ -117,9 +118,9 @@ impl PixelProcessor {
         self.old_dots = (dots as i16 - delta_dots) as u16;
     }
 
-    fn get_tile_index(&mut self, ly: u8, viewport: &(u8, u8), vram: &[u8]) {
-        self.scroll_x |= viewport.0 & 0b11111000;
-        self.scroll_y = viewport.1;
+    fn get_tile_index(&mut self, ly: u8, viewport: &Point, vram: &[u8]) {
+        self.scroll_x |= viewport.x & 0b11111000;
+        self.scroll_y = viewport.y;
 
         let tile_x = self.scroll_x.wrapping_add(self.scan_line_x) as u16;
         let mut tile_y = self.scroll_y as u16 + ly as u16;

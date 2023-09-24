@@ -40,13 +40,18 @@ pub enum Opcode {
     LdDA = 0x57,
     LdHA = 0x67,
     LdHLA = 0x77,
+    LdAB = 0x78,
     LdAE = 0x7B,
     LdAH = 0x7C,
+    LdAL = 0x7D,
     AddAB = 0x80,
+    AddAHL = 0x86,
     SubAB = 0x90,
     SubAL = 0x95,
     XorA = 0xAF,
+    CpHL = 0xBE,
     PopBC = 0xC1,
+    Jp = 0xC3,
     PushBC = 0xC5,
     Ret = 0xC9,
     Prefix = 0xCB,
@@ -55,6 +60,7 @@ pub enum Opcode {
     LdhCA = 0xE2,
     Lda16A = 0xEA,
     LdhAa8 = 0xF0,
+    DI = 0xF3,
     Cpd8 = 0xFE,
 }
 }
@@ -82,6 +88,7 @@ impl Opcode {
             Opcode::Jr => 2,
             Opcode::Jrnz => 2,
             Opcode::Jrz => 2,
+            Opcode::Jp => 3,
             Opcode::LdHLd16 => 3,
             Opcode::LdHLincA => 1,
             Opcode::IncHL => 1,
@@ -94,9 +101,12 @@ impl Opcode {
             Opcode::LdDA => 1,
             Opcode::LdHA => 1,
             Opcode::LdHLA => 1,
+            Opcode::LdAB => 1,
             Opcode::LdAE => 1,
             Opcode::LdAH => 1,
+            Opcode::LdAL => 1,
             Opcode::AddAB => 1,
+            Opcode::AddAHL => 1,
             Opcode::SubAB => 1,
             Opcode::SubAL => 1,
             Opcode::XorA => 1,
@@ -110,6 +120,8 @@ impl Opcode {
             Opcode::LdhCA => 1,
             Opcode::LdhAa8 => 2,
             Opcode::Cpd8 => 2,
+            Opcode::CpHL => 1,
+            Opcode::DI => 1,
         }
     }
 
@@ -154,6 +166,7 @@ impl Opcode {
                     2
                 }
             }
+            Self::Jp => 4,
             Self::LdHLd16 => 3,
             Self::LdHLincA => 2,
             Self::IncHL => 2,
@@ -166,9 +179,12 @@ impl Opcode {
             Self::LdDA => 1,
             Self::LdHA => 1,
             Self::LdHLA => 2,
+            Self::LdAB => 1,
             Self::LdAE => 1,
             Self::LdAH => 1,
+            Self::LdAL => 1,
             Self::AddAB => 1,
+            Self::AddAHL => 2,
             Self::SubAB => 1,
             Self::SubAL => 1,
             Self::XorA => 1,
@@ -182,6 +198,8 @@ impl Opcode {
             Self::LdhCA => 2,
             Self::LdhAa8 => 3,
             Self::Cpd8 => 2,
+            Self::CpHL => 2,
+            Self::DI => 1,
         }
     }
 }
@@ -208,8 +226,9 @@ impl CbOpcode {
 pub enum InstructionType {
     Nop,
     Stop,
+    MasterInterrupt(bool), // enable/disable
     Arithmetic(ArithmeticType),
-    JumpRelative(JumpCondition, i8),
+    Jump(JumpCondition, JumpType),
     Load8(SingleRegType, SourceType),
     Load16(DoubleRegType, u16),
     Store(DestType, SingleRegType, PostStore), // target, source, post store
@@ -219,13 +238,27 @@ pub enum InstructionType {
     Ret,
 }
 
+pub enum JumpType {
+    Relative(i8),
+    Absolute(u16),
+}
+
+impl Display for JumpType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Relative(offset) => write!(f, "Rel({:#04X})", offset),
+            Self::Absolute(addr) => write!(f, "Abs({:#06X})", addr),
+        }
+    }
+}
+
 pub enum ArithmeticType {
     Inc8(SingleRegType),
     Inc16(DoubleRegType),
     Dec(SingleRegType),
-    Add(SingleRegType, SingleRegType), // target, source
+    Add(SingleRegType, OperandType),   // target, source
     Sub(SingleRegType, SingleRegType), // target, source
-    Cmp(SingleRegType, CompareType),
+    Cmp(SingleRegType, OperandType),
     Rl(SingleRegType, bool),  // target, clear_z_flag
     RlC(SingleRegType, bool), // target, clear_z_flag
     Sla(SingleRegType),
@@ -263,16 +296,18 @@ impl Display for ArithmeticType {
     }
 }
 
-pub enum CompareType {
+pub enum OperandType {
     Imm(u8),
     Reg(SingleRegType),
+    RegAddr(DoubleRegType),
 }
 
-impl Display for CompareType {
+impl Display for OperandType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Imm(val) => write!(f, "{:#04X}", val),
             Self::Reg(reg) => write!(f, "{}", reg),
+            Self::RegAddr(reg) => write!(f, "addr({})", reg),
         }
     }
 }
@@ -424,17 +459,16 @@ impl Instruction {
         use DoubleRegType::*;
         use InstructionType::*;
         use JumpCondition::*;
+        use JumpType::*;
         use SingleRegType::*;
         use SourceType::*;
-
-        let byte = memory[1];
-        let word = LittleEndian::read_u16(&memory[1..3]);
 
         let opcode = Opcode::from_u8(memory[0]).ok_or(GbError::UnknownInstruction(memory[0]))?;
         let mut cb_opcode = None;
         let instr = match opcode {
             Opcode::Nop => Nop,
             Opcode::Stop => Stop,
+            Opcode::DI => MasterInterrupt(false),
             Opcode::IncB => Arithmetic(Inc8(B)),
             Opcode::IncC => Arithmetic(Inc8(C)),
             Opcode::IncH => Arithmetic(Inc8(H)),
@@ -445,44 +479,54 @@ impl Instruction {
             Opcode::DecC => Arithmetic(Dec(C)),
             Opcode::DecD => Arithmetic(Dec(D)),
             Opcode::DecE => Arithmetic(Dec(E)),
-            Opcode::AddAB => Arithmetic(Add(A, B)),
+            Opcode::AddAB => Arithmetic(Add(A, OperandType::Reg(B))),
+            Opcode::AddAHL => Arithmetic(Add(A, OperandType::RegAddr(HL))),
             Opcode::SubAB => Arithmetic(Sub(A, B)),
             Opcode::SubAL => Arithmetic(Sub(A, L)),
             Opcode::RlA => Arithmetic(Rl(A, true)),
             Opcode::XorA => Arithmetic(Xor(A, A)),
-            Opcode::Cpd8 => Arithmetic(Cmp(A, CompareType::Imm(byte))),
-            Opcode::Jr => JumpRelative(Always, byte as i8),
-            Opcode::Jrz => JumpRelative(Zero, byte as i8),
-            Opcode::Jrnz => JumpRelative(NotZero, byte as i8),
-            Opcode::LdAd8 => Load8(A, Imm8(byte)),
-            Opcode::LdBd8 => Load8(B, Imm8(byte)),
-            Opcode::LdCd8 => Load8(C, Imm8(byte)),
-            Opcode::LdDd8 => Load8(D, Imm8(byte)),
-            Opcode::LdEd8 => Load8(E, Imm8(byte)),
-            Opcode::LdLd8 => Load8(L, Imm8(byte)),
-            Opcode::LdSPd16 => Load16(SP, word),
-            Opcode::LdDEd16 => Load16(DE, word),
+            Opcode::Cpd8 => Arithmetic(Cmp(A, OperandType::Imm(memory[1]))),
+            Opcode::CpHL => Arithmetic(Cmp(A, OperandType::RegAddr(HL))),
+            Opcode::Jr => Jump(Always, Relative(memory[1] as i8)),
+            Opcode::Jrz => Jump(Zero, Relative(memory[1] as i8)),
+            Opcode::Jrnz => Jump(NotZero, Relative(memory[1] as i8)),
+            Opcode::Jp => Jump(Always, Absolute(LittleEndian::read_u16(&memory[1..3]))),
+            Opcode::LdAd8 => Load8(A, Imm8(memory[1])),
+            Opcode::LdBd8 => Load8(B, Imm8(memory[1])),
+            Opcode::LdCd8 => Load8(C, Imm8(memory[1])),
+            Opcode::LdDd8 => Load8(D, Imm8(memory[1])),
+            Opcode::LdEd8 => Load8(E, Imm8(memory[1])),
+            Opcode::LdLd8 => Load8(L, Imm8(memory[1])),
+            Opcode::LdSPd16 => Load16(SP, LittleEndian::read_u16(&memory[1..3])),
+            Opcode::LdDEd16 => Load16(DE, LittleEndian::read_u16(&memory[1..3])),
             Opcode::LdADE => Load8(A, RegAddr(DE)),
-            Opcode::LdHLd16 => Load16(HL, word),
+            Opcode::LdHLd16 => Load16(HL, LittleEndian::read_u16(&memory[1..3])),
             Opcode::LdHLincA => Store(DestType::RegAddr(HL), A, PostStore::Inc),
             Opcode::LdHLdecA => Store(DestType::RegAddr(HL), A, PostStore::Dec),
             Opcode::LdHLA => Store(DestType::RegAddr(HL), A, PostStore::None),
             Opcode::LdCA => Load8(C, RegImm(A)),
             Opcode::LdDA => Load8(D, RegImm(A)),
             Opcode::LdHA => Load8(H, RegImm(A)),
+            Opcode::LdAB => Load8(A, RegImm(B)),
             Opcode::LdAE => Load8(A, RegImm(E)),
             Opcode::LdAH => Load8(A, RegImm(H)),
-            Opcode::Lda16A => Store(DestType::Addr(word), A, PostStore::None),
-            Opcode::Ldha8A => Store(DestType::IoPort(byte), A, PostStore::None),
-            Opcode::LdhAa8 => Load8(A, SourceType::IoPortImm(byte)),
+            Opcode::LdAL => Load8(A, RegImm(L)),
+            Opcode::Lda16A => Store(
+                DestType::Addr(LittleEndian::read_u16(&memory[1..3])),
+                A,
+                PostStore::None,
+            ),
+            Opcode::Ldha8A => Store(DestType::IoPort(memory[1]), A, PostStore::None),
+            Opcode::LdhAa8 => Load8(A, SourceType::IoPortImm(memory[1])),
             Opcode::LdhCA => Store(DestType::IoPortReg(C), A, PostStore::None),
             Opcode::PushBC => Push(BC),
             Opcode::PopBC => Pop(BC),
-            Opcode::Calla16 => Call(CallMode::Absolute(word)),
+            Opcode::Calla16 => Call(CallMode::Absolute(LittleEndian::read_u16(&memory[1..3]))),
             Opcode::Ret => Ret,
             Opcode::Prefix => {
-                cb_opcode =
-                    Some(CbOpcode::from_u8(byte).ok_or(GbError::UnknownCbInstruction(byte))?);
+                cb_opcode = Some(
+                    CbOpcode::from_u8(memory[1]).ok_or(GbError::UnknownCbInstruction(memory[1]))?,
+                );
                 match cb_opcode.as_ref().unwrap() {
                     CbOpcode::RlC => Arithmetic(RlC(C, false)),
                     CbOpcode::SlaB => Arithmetic(Sla(B)),
@@ -496,6 +540,12 @@ impl Instruction {
             opcode,
             cb_opcode,
         })
+    }
+
+    pub fn peek_len(opcode: u8) -> Result<u8, GbError> {
+        Ok(Opcode::from_u8(opcode)
+            .ok_or(GbError::UnknownInstruction(opcode))?
+            .length())
     }
 
     pub fn len(&self) -> u8 {
@@ -520,8 +570,9 @@ impl Display for Instruction {
         match &self.instr {
             Nop => write!(f, "Nop"),
             Stop => write!(f, "Stop"),
+            MasterInterrupt(enable) => write!(f, "IME {}", enable),
             Arithmetic(ar_type) => write!(f, "{}", ar_type),
-            JumpRelative(cond, offset) => write!(f, "Jr{}, {:#04X}", cond, offset),
+            Jump(cond, jump_type) => write!(f, "J {}, {}", cond, jump_type),
             Load8(reg, source) => write!(f, "Load {} {}", reg, source),
             Load16(reg, source) => write!(f, "Load {} {:#06X}", reg, source),
             Store(dest, reg, post_store) => write!(f, "Store {} {} {}", dest, reg, post_store),

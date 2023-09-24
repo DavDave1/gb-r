@@ -3,11 +3,13 @@ pub mod bus;
 pub mod cpu;
 pub mod game_boy;
 pub mod instruction;
+pub mod interrupts;
 pub mod io_registers;
+pub mod memory_map;
 pub mod ppu;
+pub mod timer;
 
 mod alu;
-mod memory_map;
 
 use thiserror::Error;
 

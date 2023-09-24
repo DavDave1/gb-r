@@ -21,7 +21,7 @@ impl From<u8> for DutyCycle {
             1 => DutyCycle::OneToFour,
             2 => DutyCycle::Half,
             3 => DutyCycle::ThreeToFour,
-            _ => panic!("Cannot convert {} to GrayShade", value),
+            _ => panic!("Cannot convert {} to DutyCycle", value),
         }
     }
 }
@@ -116,7 +116,7 @@ impl From<u8> for OutputLevel {
             1 => OutputLevel::MaxVolume,
             2 => OutputLevel::HalfVolume,
             3 => OutputLevel::QuarterVolume,
-            _ => panic!("Cannot convert {} to GrayShade", value),
+            _ => panic!("Cannot convert {} to OutputLevel", value),
         }
     }
 }
