@@ -5,8 +5,8 @@ use crate::gbr::bus::Bus;
 use crate::gbr::GbError;
 
 use super::instruction::{
-    CallMode, DestType, DoubleRegType, InstructionType, JumpCondition, JumpType, PostStore,
-    SingleRegType, SourceType,
+    CallMode, DestType, DoubleRegType, GenericRegType, InstructionType, JumpCondition, JumpType,
+    PostStore, SingleRegType, SourceType,
 };
 
 #[derive(Default, Clone)]
@@ -251,27 +251,35 @@ impl CPU {
         false
     }
 
-    fn load8(
+    fn load(
         &mut self,
         bus: &Bus,
-        reg: &SingleRegType,
+        reg: &GenericRegType,
         source: &SourceType,
     ) -> Result<(), GbError> {
-        let val = match source {
-            SourceType::Addr(addr) => bus.read_byte(*addr)?,
-            SourceType::Imm8(imm) => *imm,
-            SourceType::Imm16(_) => {
-                return Err(GbError::IllegalOp("load imm16 into 8bit register".into()))
-            }
-            SourceType::RegImm(src_reg) => self.read_single_reg(src_reg),
-            SourceType::RegAddr(src_reg) => bus.read_byte(self.read_double_reg(src_reg))?,
-            SourceType::IoPortImm(imm) => bus.read_byte(0xFF00 + *imm as u16)?,
-            SourceType::IoPortReg(src_reg) => {
-                bus.read_byte(0xFF00 + self.read_single_reg(src_reg) as u16)?
-            }
-        };
+        match reg {
+            GenericRegType::Double(reg) => match source {
+                SourceType::Imm16(val) => self.write_double_reg(reg, *val),
+                _ => return Err(GbError::IllegalOp("load u8 into double register".into())),
+            },
+            GenericRegType::Single(reg) => {
+                let val = match source {
+                    SourceType::Addr(addr) => bus.read_byte(*addr)?,
+                    SourceType::Imm8(imm) => *imm,
+                    SourceType::Imm16(_) => {
+                        return Err(GbError::IllegalOp("load imm16 into 8bit register".into()))
+                    }
+                    SourceType::RegImm(src_reg) => self.read_single_reg(src_reg),
+                    SourceType::RegAddr(src_reg) => bus.read_byte(self.read_double_reg(src_reg))?,
+                    SourceType::IoPortImm(imm) => bus.read_byte(0xFF00 + *imm as u16)?,
+                    SourceType::IoPortReg(src_reg) => {
+                        bus.read_byte(0xFF00 + self.read_single_reg(src_reg) as u16)?
+                    }
+                };
 
-        self.write_single_reg(reg, val);
+                self.write_single_reg(reg, val);
+            }
+        }
         Ok(())
     }
 
@@ -339,8 +347,7 @@ impl CPU {
             InstructionType::Jump(condition, jump_type) => {
                 jumped = self.jump(condition, jump_type);
             }
-            InstructionType::Load8(reg, source) => self.load8(bus, reg, source)?,
-            InstructionType::Load16(reg, value) => self.write_double_reg(reg, *value),
+            InstructionType::Load(reg, source) => self.load(bus, reg, source)?,
             InstructionType::Store(dest, src, post_store) => {
                 self.store(bus, dest, src, post_store)?
             }

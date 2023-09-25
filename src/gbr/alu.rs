@@ -23,11 +23,15 @@ impl ALU {
                 let res = ALU::sub(cpu, cpu.read_single_reg(dst), cpu.read_single_reg(src));
                 cpu.write_single_reg(dst, res);
             }
-            ArithmeticType::Inc8(dst) => {
-                let res = ALU::inc(cpu, cpu.read_single_reg(dst));
-                cpu.write_single_reg(dst, res);
-            }
-            ArithmeticType::Inc16(dst) => cpu.write_double_reg(dst, cpu.read_double_reg(dst) + 1),
+            ArithmeticType::Inc(dst) => match dst {
+                GenericRegType::Single(reg) => {
+                    let res = ALU::inc(cpu, cpu.read_single_reg(reg));
+                    cpu.write_single_reg(reg, res);
+                }
+                GenericRegType::Double(reg) => {
+                    cpu.write_double_reg(reg, cpu.read_double_reg(reg) + 1)
+                }
+            },
             ArithmeticType::Dec(dst) => match dst {
                 GenericRegType::Single(reg) => {
                     let res = ALU::dec(cpu, cpu.read_single_reg(reg));
