@@ -192,9 +192,9 @@ impl Bus {
             MappedAddress::WorkRamBank0(_addr) => {
                 Err(GbError::Unimplemented("reading from work ram 0".into()))
             }
-            MappedAddress::WorkRamActiveBank(_addr) => Err(GbError::Unimplemented(
-                "reading from work ram active bank".into(),
-            )),
+            MappedAddress::WorkRamActiveBank(addr) => {
+                Ok(LittleEndian::read_u16(&self.wram_acv_bank[addr as usize..]))
+            }
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
