@@ -1,7 +1,7 @@
 use super::{
     bus::Bus,
     cpu::CPU,
-    instruction::{ArithmeticType, OperandType},
+    instruction::{ArithmeticType, GenericRegType, OperandType, SingleRegType},
     GbError,
 };
 
@@ -28,10 +28,15 @@ impl ALU {
                 cpu.write_single_reg(dst, res);
             }
             ArithmeticType::Inc16(dst) => cpu.write_double_reg(dst, cpu.read_double_reg(dst) + 1),
-            ArithmeticType::Dec(dst) => {
-                let res = ALU::dec(cpu, cpu.read_single_reg(dst));
-                cpu.write_single_reg(dst, res);
-            }
+            ArithmeticType::Dec(dst) => match dst {
+                GenericRegType::Single(reg) => {
+                    let res = ALU::dec(cpu, cpu.read_single_reg(reg));
+                    cpu.write_single_reg(reg, res);
+                }
+                GenericRegType::Double(reg) => {
+                    cpu.write_double_reg(reg, cpu.read_double_reg(reg) - 1)
+                }
+            },
             ArithmeticType::Cmp(dst, src) => {
                 ALU::cp(
                     cpu,
@@ -62,6 +67,24 @@ impl ALU {
             ArithmeticType::TestBit(reg, bit) => {
                 ALU::test_bit(cpu, cpu.read_single_reg(reg), *bit);
             }
+            ArithmeticType::ResetBit(reg, bit) => ALU::reset_bit(cpu, reg, *bit),
+            ArithmeticType::And(reg, op) => {
+                let res = ALU::and(
+                    cpu,
+                    cpu.read_single_reg(reg),
+                    ALU::val_from_operand(op, cpu, bus)?,
+                );
+                cpu.write_single_reg(reg, res);
+            }
+            ArithmeticType::Or(reg, op) => {
+                let res = ALU::or(
+                    cpu,
+                    cpu.read_single_reg(reg),
+                    ALU::val_from_operand(op, cpu, bus)?,
+                );
+                cpu.write_single_reg(reg, res);
+            }
+
             ArithmeticType::Xor(dst, src) => {
                 let res = ALU::xor(cpu, cpu.read_single_reg(dst), cpu.read_single_reg(src));
                 cpu.write_single_reg(dst, res);
@@ -124,11 +147,31 @@ impl ALU {
         result
     }
 
+    fn and(cpu: &mut CPU, left: u8, right: u8) -> u8 {
+        let result = left & right;
+
+        cpu.set_zero_flag(result == 0);
+        cpu.set_bcd_n_flag(false);
+        cpu.set_bcd_h_flag(true);
+        cpu.set_carry_flag(false);
+        result
+    }
+
+    fn or(cpu: &mut CPU, left: u8, right: u8) -> u8 {
+        let result = left | right;
+
+        cpu.set_zero_flag(result == 0);
+        cpu.set_bcd_n_flag(false);
+        cpu.set_bcd_h_flag(false);
+        cpu.set_carry_flag(false);
+        result
+    }
+
     pub fn xor(cpu: &mut CPU, left: u8, right: u8) -> u8 {
         let result = left ^ right;
 
         cpu.set_bcd_h_flag(false);
-        cpu.set_bcd_n_flag(true);
+        cpu.set_bcd_n_flag(false);
         cpu.set_carry_flag(false);
         cpu.set_zero_flag(result == 0);
         result
@@ -181,6 +224,13 @@ impl ALU {
         cpu.set_bcd_h_flag(true);
         cpu.set_bcd_n_flag(false);
         cpu.set_zero_flag(value & mask == 0);
+    }
+
+    fn reset_bit(cpu: &mut CPU, reg: &SingleRegType, bit: u8) {
+        let mask = !(0b1 << bit);
+
+        let val = cpu.read_single_reg(reg);
+        cpu.write_single_reg(reg, val & mask);
     }
 
     pub fn cp(cpu: &mut CPU, left: u8, right: u8) {

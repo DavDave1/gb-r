@@ -279,7 +279,7 @@ impl CPU {
         &mut self,
         bus: &mut Bus,
         dest: &DestType,
-        src: &SingleRegType,
+        src: &SourceType,
         post_store: &PostStore,
     ) -> Result<(), GbError> {
         let addr = match dest {
@@ -289,7 +289,21 @@ impl CPU {
             DestType::IoPortReg(reg_offset) => 0xFF00 + self.read_single_reg(reg_offset) as u16,
         };
 
-        bus.write_byte(addr, self.read_single_reg(src))?;
+        let val = match src {
+            SourceType::Imm8(v) => *v,
+            SourceType::Imm16(_) => {
+                return Err(GbError::IllegalOp("store from imm16 source".into()))
+            }
+            SourceType::RegImm(reg) => self.read_single_reg(reg),
+            SourceType::RegAddr(reg) => bus.read_byte(self.read_double_reg(reg))?,
+            SourceType::Addr(addr) => bus.read_byte(*addr)?,
+            SourceType::IoPortReg(reg) => {
+                bus.read_byte(0xFF00 + self.read_single_reg(reg) as u16)?
+            }
+            SourceType::IoPortImm(offs) => bus.read_byte(0xFF00 + *offs as u16)?,
+        };
+
+        bus.write_byte(addr, val)?;
 
         match post_store {
             PostStore::Inc => self.write_hl(self.read_hl() + 1),
@@ -327,8 +341,8 @@ impl CPU {
             }
             InstructionType::Load8(reg, source) => self.load8(bus, reg, source)?,
             InstructionType::Load16(reg, value) => self.write_double_reg(reg, *value),
-            InstructionType::Store(dest, reg, post_store) => {
-                self.store(bus, dest, reg, post_store)?
+            InstructionType::Store(dest, src, post_store) => {
+                self.store(bus, dest, src, post_store)?
             }
             InstructionType::Push(reg_type) => {
                 self.push_stack(bus, self.read_double_reg(reg_type))?
