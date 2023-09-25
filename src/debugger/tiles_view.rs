@@ -1,13 +1,13 @@
 use egui::{ColorImage, TextureOptions};
 use image::{GenericImage, RgbaImage};
 
-use crate::gbr::ppu::{background_palette::BackgroundPalette, TileList, TILE_HEIGHT, TILE_WIDTH};
+use crate::gbr::ppu::{palette::Palette, TileList, TILE_HEIGHT, TILE_WIDTH};
 
 const TILE_PER_ROW: usize = 16;
 
 // TODO: replace usage if image library with handmade
 // tilemap to frame generator
-fn create_image(tiles: &TileList, palette: &BackgroundPalette) -> ColorImage {
+fn create_image(tiles: &TileList, palette: &Palette) -> ColorImage {
     let rows_count = tiles.len() / TILE_PER_ROW as usize;
     let w = TILE_PER_ROW * TILE_WIDTH as usize;
     let h = rows_count * TILE_HEIGHT as usize;
@@ -52,7 +52,7 @@ pub struct TilesView {
 }
 
 impl TilesView {
-    pub fn show(&mut self, tiles: &TileList, palette: &BackgroundPalette, ui: &mut egui::Ui) {
+    pub fn show(&mut self, tiles: &TileList, palette: &Palette, ui: &mut egui::Ui) {
         if tiles.len() > TILE_PER_ROW {
             match self.texture.as_mut() {
                 None => {

@@ -1,6 +1,6 @@
 use egui::{Color32, ColorImage, TextureHandle, TextureOptions};
 
-use crate::gbr::ppu::background_palette::BackgroundPalette;
+use crate::gbr::ppu::palette::Palette;
 
 const PALETTE_TILE_WIDTH: usize = 16;
 const PALETTE_TILE_HEIGHT: usize = 16;
@@ -19,7 +19,7 @@ impl PaletteView {
         }
     }
 
-    pub fn show(&mut self, palette: &BackgroundPalette, ui: &mut egui::Ui) {
+    pub fn show(&mut self, palette: &Palette, ui: &mut egui::Ui) {
         self.update_image(palette);
 
         let texture = self.texture.get_or_insert_with(|| {
@@ -32,7 +32,7 @@ impl PaletteView {
         ui.image(texture.id(), texture.size_vec2());
     }
 
-    fn update_image(&mut self, palette: &BackgroundPalette) {
+    fn update_image(&mut self, palette: &Palette) {
         for index in 0..SIZE[0] * SIZE[1] {
             let x = (index) % SIZE[0];
 

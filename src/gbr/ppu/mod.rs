@@ -1,6 +1,6 @@
-pub mod background_palette;
 pub mod lcd_control_register;
 pub mod lcd_status_register;
+pub mod palette;
 pub mod pixel_processor;
 pub mod rgba;
 pub mod tile;
@@ -8,9 +8,9 @@ pub mod tile;
 use byteorder::{ByteOrder, LittleEndian};
 
 use self::{
-    background_palette::BackgroundPalette,
     lcd_control_register::LcdControlRegister,
     lcd_status_register::{LcsStatusRegister, ScreenMode},
+    palette::Palette,
     pixel_processor::PixelProcessor,
     rgba::Rgba,
     tile::Tile,
@@ -65,7 +65,9 @@ pub struct Point {
 pub struct PpuState {
     pub lcd_control: LcdControlRegister,
     pub lcd_status: LcsStatusRegister,
-    pub bg_palette: BackgroundPalette,
+    pub bg_palette: Palette,
+    pub obj_palette0: Palette,
+    pub obj_palette1: Palette,
     pub ly: u8,
     pub lyc: u8,
     pub viewport: Point,
@@ -77,7 +79,9 @@ pub struct PPU {
     vram: Box<[u8]>,
     lcd_control: LcdControlRegister,
     lcd_status: LcsStatusRegister,
-    bg_palette: BackgroundPalette,
+    bg_palette: Palette,
+    obj_palette0: Palette,
+    obj_palette1: Palette,
     ly: u8,
     lyc: u8,
     viewport: Point,
@@ -95,6 +99,8 @@ impl PPU {
             lcd_control: LcdControlRegister::default(),
             lcd_status: LcsStatusRegister::default(),
             bg_palette: Default::default(),
+            obj_palette0: Default::default(),
+            obj_palette1: Default::default(),
             ly: 0,
             lyc: 0,
             viewport: Point::default(),
@@ -225,6 +231,8 @@ impl PPU {
             0x0044 => Ok(self.ly),
             0x0045 => Ok(self.lyc),
             0x0047 => Ok(self.bg_palette.into()),
+            0x0048 => Ok(self.obj_palette0.into()),
+            0x0049 => Ok(self.obj_palette1.into()),
             _ => Err(GbError::IllegalOp(format!(
                 "Write to invalid PPU reg {:#06X}",
                 addr
@@ -241,6 +249,8 @@ impl PPU {
             0x0044 => return Err(GbError::IllegalOp("Cannot write to LY register".into())),
             0x0045 => self.lyc = value,
             0x0047 => self.bg_palette = value.into(),
+            0x0048 => self.obj_palette0 = value.into(),
+            0x0049 => self.obj_palette1 = value.into(),
             0x004A => self.win_pos.y = value,
             0x004B => self.win_pos.x = value,
             _ => {
@@ -291,6 +301,8 @@ impl PPU {
             lcd_control: self.lcd_control,
             lcd_status: self.lcd_status,
             bg_palette: self.bg_palette,
+            obj_palette0: self.obj_palette0,
+            obj_palette1: self.obj_palette1,
             ly: self.ly,
             lyc: self.lyc,
             viewport: self.viewport.clone(),

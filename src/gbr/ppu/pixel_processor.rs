@@ -1,8 +1,8 @@
 use crate::gbr::ppu::TILEMAP_BLOCK0_START;
 
 use super::{
-    background_palette::BackgroundPalette,
     lcd_control_register::LcdControlRegister,
+    palette::Palette,
     tile::{Tile, TILE_COLOR_ID},
     Point, MODE_2_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_BLOCK1_START, TILE_BLOCK2_START,
     TILE_DATA_SIZE,
@@ -51,7 +51,7 @@ impl PixelProcessor {
         viewport: &Point,
         lcd_ctrl: &LcdControlRegister,
         vram: &[u8],
-        bg_palette: &BackgroundPalette,
+        bg_palette: &Palette,
     ) {
         self.scan_line_x = 0;
         self.old_dots = MODE_2_DOTS;
@@ -78,7 +78,7 @@ impl PixelProcessor {
         viewport: &Point,
         lcd_ctrl: &LcdControlRegister,
         vram: &[u8],
-        bg_palette: &BackgroundPalette,
+        bg_palette: &Palette,
     ) {
         if dots < self.old_dots {
             return;
@@ -155,7 +155,7 @@ impl PixelProcessor {
         self.curr_tile_msb = vram[tile_addr + 1];
     }
 
-    fn draw_tile(&mut self, ly: u8, bg_palette: &BackgroundPalette) {
+    fn draw_tile(&mut self, ly: u8, bg_palette: &Palette) {
         let mut line = [0; 8];
         Tile::decode_line(self.curr_tile_msb, self.curr_tile_lsb, &mut line);
 

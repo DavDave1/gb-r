@@ -185,8 +185,18 @@ impl UiState {
                     ));
                     ui.separator();
                     ui.horizontal_wrapped(|ui| {
-                        ui.label("Palette: ");
+                        ui.label("BG Palette: ");
                         self.palette_view.show(&self.gb_state.ppu.bg_palette, ui);
+                    });
+
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Obj Palette 0: ");
+                        self.palette_view.show(&self.gb_state.ppu.obj_palette0, ui);
+                    });
+
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Obj Palette 1: ");
+                        self.palette_view.show(&self.gb_state.ppu.obj_palette1, ui);
                     });
                 });
             });

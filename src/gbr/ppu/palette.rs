@@ -9,14 +9,6 @@ pub enum GrayShade {
 }
 
 impl GrayShade {
-    pub fn as_ascii(&self) -> char {
-        match self {
-            GrayShade::White => 176u8 as char,
-            GrayShade::LightGray => 177u8 as char,
-            GrayShade::DarkGray => 178u8 as char,
-            GrayShade::Black => 219u8 as char,
-        }
-    }
     pub fn to_rgba(&self) -> Rgba {
         match self {
             GrayShade::Black => Rgba::black(),
@@ -51,12 +43,12 @@ impl From<GrayShade> for u8 {
 }
 
 #[derive(Copy, Clone)]
-pub struct BackgroundPalette {
+pub struct Palette {
     indexed: [GrayShade; 4],
     rgba: [Rgba; 4],
 }
 
-impl BackgroundPalette {
+impl Palette {
     pub fn new(color0: GrayShade, color1: GrayShade, color2: GrayShade, color3: GrayShade) -> Self {
         Self {
             indexed: [color0, color1, color2, color3],
@@ -77,19 +69,19 @@ impl BackgroundPalette {
     }
 }
 
-impl Default for BackgroundPalette {
+impl Default for Palette {
     fn default() -> Self {
-        BackgroundPalette {
+        Palette {
             indexed: [GrayShade::White; 4],
             rgba: [Rgba::default(); 4],
         }
     }
 }
 
-impl From<u8> for BackgroundPalette {
+impl From<u8> for Palette {
     fn from(value: u8) -> Self {
         let mask: u8 = 0b0000011;
-        BackgroundPalette::new(
+        Palette::new(
             GrayShade::from(value & mask),
             GrayShade::from(value >> 2 & mask),
             GrayShade::from(value >> 4 & mask),
@@ -98,8 +90,8 @@ impl From<u8> for BackgroundPalette {
     }
 }
 
-impl From<BackgroundPalette> for u8 {
-    fn from(value: BackgroundPalette) -> Self {
+impl From<Palette> for u8 {
+    fn from(value: Palette) -> Self {
         value.indexed[0] as u8
             | (value.indexed[1] as u8) << 2
             | (value.indexed[2] as u8) << 4
