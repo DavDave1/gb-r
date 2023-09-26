@@ -1,10 +1,12 @@
 pub mod apu;
 pub mod bus;
+pub mod cart_header;
 pub mod cpu;
 pub mod game_boy;
 pub mod instruction;
 pub mod interrupts;
 pub mod io_registers;
+pub mod mbc;
 pub mod memory_map;
 pub mod ppu;
 pub mod timer;
@@ -25,4 +27,6 @@ pub enum GbError {
     IllegalOp(String),
     #[error("Address {0:#06X} out of bounds")]
     AddrOutOfBounds(u16),
+    #[error("Header parsing: {0}")]
+    HeaderParsing(String),
 }

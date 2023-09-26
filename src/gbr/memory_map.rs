@@ -2,17 +2,17 @@ use crate::gbr::GbError;
 
 pub const BOOT_ROM_SIZE: usize = 0x100;
 
-const ROM_BANK0_START: u16 = 0x0000;
-const ROM_BANK0_END: u16 = 0x3FFF;
-const ROM_ACTIVE_BANK_START: u16 = 0x4000;
-const ROM_ACTIVE_BANK_END: u16 = 0x7FFF;
+pub const CART_ROM_BANK0_START: u16 = 0x0000;
+pub const CART_ROM_BANK0_END: u16 = 0x3FFF;
+pub const CART_ROM_ACTIVE_BANK_START: u16 = 0x4000;
+pub const CART_ROM_ACTIVE_BANK_END: u16 = 0x7FFF;
 
 pub const VIDEO_RAM_START: u16 = 0x8000;
 const VIDEO_RAM_END: u16 = 0x9FFF;
 pub const VIDEO_RAM_SIZE: usize = (VIDEO_RAM_END - VIDEO_RAM_START + 1) as usize;
 
-const EXTERNAL_RAM_START: u16 = 0xA000;
-const EXTERNAL_RAM_END: u16 = 0xBFFF;
+pub const CART_RAM_START: u16 = 0xA000;
+pub const CART_RAM_END: u16 = 0xBFFF;
 
 const WORK_RAM_BANK0_START: u16 = 0xC000;
 const WORK_RAM_BANK0_END: u16 = 0xCFFF;
@@ -52,15 +52,14 @@ const HIGH_RAM_END: u16 = 0xFFFE;
 pub const HIGH_RAM_SIZE: usize = (HIGH_RAM_END - HIGH_RAM_START + 1) as usize;
 
 pub enum MappedAddress {
-    RomBank0(u16),
-    RomActiveBank(u16),
+    CartRom(u16),
     VideoRam(u16),
-    ExternalRam(u16),
+    CartRam(u16),
     WorkRamBank0(u16),
     WorkRamActiveBank(u16),
     //  EchoRam(u16),
     SpriteAttributeTable(u16),
-    //  NotUsable(u16),
+    NotUsable(u16),
     TimerRegisters(u16),
     ApuRegisters(u16),
     PpuRegisters(u16),
@@ -73,14 +72,9 @@ pub enum MappedAddress {
 
 pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
     match addr {
-        ROM_BANK0_START..=ROM_BANK0_END => Ok(MappedAddress::RomBank0(addr - ROM_BANK0_START)),
-        ROM_ACTIVE_BANK_START..=ROM_ACTIVE_BANK_END => {
-            Ok(MappedAddress::RomActiveBank(addr - ROM_ACTIVE_BANK_START))
-        }
+        CART_ROM_BANK0_START..=CART_ROM_ACTIVE_BANK_END => Ok(MappedAddress::CartRom(addr)),
         VIDEO_RAM_START..=VIDEO_RAM_END => Ok(MappedAddress::VideoRam(addr - VIDEO_RAM_START)),
-        EXTERNAL_RAM_START..=EXTERNAL_RAM_END => {
-            Ok(MappedAddress::ExternalRam(addr - EXTERNAL_RAM_START))
-        }
+        CART_RAM_START..=CART_RAM_END => Ok(MappedAddress::CartRam(addr)),
         WORK_RAM_BANK0_START..=WORK_RAM_BANK0_END => {
             Ok(MappedAddress::WorkRamBank0(addr - WORK_RAM_BANK0_START))
         }
@@ -94,10 +88,7 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
         SPRITE_ATTRIBUTE_TABLE_START..=SPRITE_ATTRIBUTE_TABLE_END => Ok(
             MappedAddress::SpriteAttributeTable(addr - SPRITE_ATTRIBUTE_TABLE_START),
         ),
-        NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => Err(GbError::IllegalOp(format!(
-            "access to not usable RAM RAM {:#06X}",
-            addr
-        ))),
+        NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => Ok(MappedAddress::NotUsable(addr)),
         TIMER_REGISTERS_START..=TIMER_REGISTERS_END => {
             Ok(MappedAddress::TimerRegisters(addr - IO_REGISTERS_START))
         }

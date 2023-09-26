@@ -56,8 +56,8 @@ impl Debugger {
         while pc < BOOT_ROM_SIZE as u16 {
             let instruction = match emu.bus().fetch_instruction(pc) {
                 Ok(instr) => instr,
-                Err(e) => {
-                    log::error!("disassemble error: {}", e);
+                Err(_) => {
+                    // log::error!("disassemble error: {}", e);
                     disassembly.push((pc, None));
                     pc += 1;
                     continue;

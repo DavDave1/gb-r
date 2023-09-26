@@ -28,11 +28,6 @@ pub enum EmuState {
 pub struct DebuggerApp {}
 
 impl DebuggerApp {
-    pub fn new() -> Self {
-        Self::init_logger();
-
-        Self {}
-    }
     pub fn run(&self, game_boy: Arc<RwLock<GameBoy>>) -> Result<(), Box<dyn std::error::Error>> {
         let debugger = Debugger::new();
 
@@ -140,11 +135,6 @@ impl DebuggerApp {
                 _ => (),
             }
         });
-    }
-
-    fn init_logger() {
-        dotenv::dotenv().ok();
-        pretty_env_logger::try_init().ok();
     }
 
     fn start_emu_thread(

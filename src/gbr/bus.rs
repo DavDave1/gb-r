@@ -3,14 +3,13 @@ use std::{fs, path::PathBuf};
 use byteorder::{ByteOrder, LittleEndian};
 
 use super::{
-    apu::APU, instruction::Instruction, interrupts::InterruptHandler, io_registers::IORegisters,
-    memory_map::*, ppu::PPU, timer::Timer, GbError,
+    apu::APU, cart_header::CartHeader, instruction::Instruction, interrupts::InterruptHandler,
+    io_registers::IORegisters, mbc::MBC, memory_map::*, ppu::PPU, timer::Timer, GbError,
 };
 
 pub struct Bus {
     boot_rom_lock: bool,
     boot_rom: Box<[u8]>,
-    cart_rom: Box<[u8]>,
     hram: Box<[u8]>,
     wram: Box<[u8]>,
     wram_acv_bank: Box<[u8]>,
@@ -19,6 +18,7 @@ pub struct Bus {
     apu: APU,
     ir_handler: InterruptHandler,
     timer: Timer,
+    mbc: MBC,
 }
 
 impl Bus {
@@ -30,20 +30,14 @@ impl Bus {
             panic!("Wrong boot rom size");
         }
 
-        let cart_rom = match cart_rom_filename {
-            Some(path) => fs::read(path)
-                .map_err(|err| {
-                    log::error!("Failed to read cart ROM: {}", err);
-                    Vec::<u8>::new()
-                })
-                .unwrap(),
-            None => vec![],
+        let mbc = match cart_rom_filename {
+            Some(path) => MBC::new(&path).unwrap(),
+            None => MBC::default(),
         };
 
         Bus {
             boot_rom_lock: true,
             boot_rom: boot_rom.into_boxed_slice(),
-            cart_rom: cart_rom.into_boxed_slice(),
             hram: vec![0; HIGH_RAM_SIZE].into_boxed_slice(),
             wram: vec![0; WORK_RAM_BANK0_SIZE].into_boxed_slice(),
             wram_acv_bank: vec![0; WORK_RAM_ACTIVE_BANK_SIZE].into_boxed_slice(),
@@ -52,6 +46,7 @@ impl Bus {
             apu: APU::new(),
             ir_handler: InterruptHandler::default(),
             timer: Timer::default(),
+            mbc,
         }
     }
 
@@ -82,15 +77,24 @@ impl Bus {
         &mut self.ir_handler
     }
 
+    pub fn mbc(&self) -> &MBC {
+        &self.mbc
+    }
+
     pub fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError> {
         match map_address(addr)? {
-            MappedAddress::RomBank0(addr) => {
+            MappedAddress::CartRom(addr) => {
                 if self.boot_rom_lock {
                     let len = Instruction::peek_len(self.boot_rom[addr as usize])? as usize;
                     Instruction::decode(&self.boot_rom[addr as usize..addr as usize + len])
                 } else {
-                    let len = Instruction::peek_len(self.cart_rom[addr as usize])? as usize;
-                    Instruction::decode(&self.cart_rom[addr as usize..addr as usize + len])
+                    let len = Instruction::peek_len(self.mbc.read_byte(addr)?)? as usize;
+
+                    let mut instr_data = vec![0; len];
+                    for i in 0..len as u16 {
+                        instr_data[i as usize] = self.mbc.read_byte(addr + i)?;
+                    }
+                    Instruction::decode(&instr_data)
                 }
             }
             _ => Err(GbError::Unimplemented(
@@ -101,27 +105,24 @@ impl Bus {
 
     pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
         match map_address(addr)? {
-            MappedAddress::RomBank0(addr) => {
+            MappedAddress::CartRom(addr) => {
                 if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
                     Ok(self.boot_rom[addr as usize])
-                } else if !self.cart_rom.is_empty() {
-                    Ok(self.cart_rom[addr as usize])
                 } else {
-                    Ok(0xFF)
+                    Ok(self.mbc.read_byte(addr)?)
                 }
             }
-            MappedAddress::RomActiveBank(_addr) => Err(GbError::Unimplemented(
-                "reading from cart active bank".into(),
-            )),
             MappedAddress::VideoRam(addr) => self.ppu.read_byte(addr),
-            MappedAddress::ExternalRam(_addr) => {
-                Err(GbError::Unimplemented("reading from external ram".into()))
-            }
+            MappedAddress::CartRam(addr) => self.mbc.read_byte(addr),
             MappedAddress::WorkRamBank0(addr) => Ok(self.wram[addr as usize]),
             MappedAddress::WorkRamActiveBank(addr) => Ok(self.wram_acv_bank[addr as usize]),
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
+            MappedAddress::NotUsable(addr) => {
+                log::warn!("Reading byte from unusable addr {:#06X}", addr);
+                Ok(0xFF)
+            }
             MappedAddress::TimerRegisters(addr) => self.timer.read_reg(addr),
             MappedAddress::ApuRegisters(addr) => self.apu.read_reg(addr),
             MappedAddress::PpuRegisters(addr) => self.ppu.read_reg(addr),
@@ -139,16 +140,9 @@ impl Bus {
 
     pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match map_address(addr)? {
-            MappedAddress::RomBank0(_addr) => {
-                return Err(GbError::IllegalOp("write to rom bank 0".into()));
-            }
-            MappedAddress::RomActiveBank(_addr) => {
-                return Err(GbError::IllegalOp("write to rom active bank".into()));
-            }
+            MappedAddress::CartRom(addr) => self.mbc.write_byte(addr, value)?,
             MappedAddress::VideoRam(addr) => self.ppu.write_byte(addr, value)?,
-            MappedAddress::ExternalRam(_addr) => {
-                return Err(GbError::Unimplemented("writing to external ram".into()));
-            }
+            MappedAddress::CartRam(addr) => self.mbc.write_byte(addr, value)?,
             MappedAddress::WorkRamBank0(addr) => {
                 self.wram[addr as usize] = value;
             }
@@ -159,6 +153,9 @@ impl Bus {
                 return Err(GbError::Unimplemented(
                     "writing to sprite attribute table".into(),
                 ));
+            }
+            MappedAddress::NotUsable(addr) => {
+                log::warn!("Writing byte {:#04X} to unusable addr {:#06X}", value, addr);
             }
             MappedAddress::TimerRegisters(addr) => self.timer.write_reg(addr, value)?,
             MappedAddress::ApuRegisters(addr) => self.apu.write_reg(addr, value)?,
@@ -175,20 +172,15 @@ impl Bus {
 
     pub fn read_word(&self, addr: u16) -> Result<u16, GbError> {
         match map_address(addr)? {
-            MappedAddress::RomBank0(addr) => {
+            MappedAddress::CartRom(addr) => {
                 if self.boot_rom_lock {
                     Ok(LittleEndian::read_u16(&self.boot_rom[addr as usize..]))
                 } else {
-                    Err(GbError::Unimplemented("reading from cart bank 0".into()))
+                    self.mbc.read_word(addr)
                 }
             }
-            MappedAddress::RomActiveBank(_addr) => Err(GbError::Unimplemented(
-                "reading from cart active bank".into(),
-            )),
             MappedAddress::VideoRam(addr) => self.ppu.read_word(addr),
-            MappedAddress::ExternalRam(_addr) => {
-                Err(GbError::Unimplemented("reading from external ram".into()))
-            }
+            MappedAddress::CartRam(_addr) => self.mbc.read_word(addr),
             MappedAddress::WorkRamBank0(_addr) => {
                 Err(GbError::Unimplemented("reading from work ram 0".into()))
             }
@@ -198,6 +190,10 @@ impl Bus {
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
+            MappedAddress::NotUsable(addr) => {
+                log::warn!("Reading word from unusable addr {:#06X}", addr);
+                Ok(0xFFFF)
+            }
             MappedAddress::TimerRegisters(_addr) => {
                 Err(GbError::IllegalOp("read word from Timer registers".into()))
             }

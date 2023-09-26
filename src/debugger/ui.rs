@@ -18,7 +18,7 @@ use super::debugger::{AsmState, DebuggerCommand};
 use super::debugger_app::EmuState;
 use super::palette_view::PaletteView;
 use super::tiles_view::TilesView;
-use super::{asm_view, cpu_view};
+use super::{asm_view, cpu_view, mbc_view};
 use super::{interrupts_view, io_registers_view};
 
 struct UiState {
@@ -145,6 +145,8 @@ impl UiState {
                     io_registers_view::show(&self.gb_state.io_registers, ui);
                     ui.separator();
                     interrupts_view::show(&mut self.gb_state.ir_handler, ui);
+                    ui.separator();
+                    mbc_view::show(&mut self.gb_state.mbc, ui);
                     ui.separator();
                     asm_view::show(
                         &self.cmd_sig,
