@@ -4,7 +4,7 @@ use byteorder::{ByteOrder, LittleEndian};
 
 use super::{
     apu::APU, instruction::Instruction, interrupts::InterruptHandler, io_registers::IORegisters,
-    mbc::MBC, memory_map::*, ppu::PPU, timer::Timer, GbError,
+    mbc::MBC, memory_map::*, oam::ObjAttributeMemory, ppu::PPU, timer::Timer, GbError,
 };
 
 pub struct Bus {
@@ -13,6 +13,7 @@ pub struct Bus {
     hram: Box<[u8]>,
     wram: Box<[u8]>,
     wram_acv_bank: Box<[u8]>,
+    oam: ObjAttributeMemory,
     io_registers: IORegisters,
     ppu: PPU,
     apu: APU,
@@ -41,6 +42,7 @@ impl Bus {
             hram: vec![0; HRAM_SIZE].into_boxed_slice(),
             wram: vec![0; WRAM_BANK0_SIZE].into_boxed_slice(),
             wram_acv_bank: vec![0; WRAM_ACTIVE_BANK_SIZE].into_boxed_slice(),
+            oam: ObjAttributeMemory::new(),
             io_registers: IORegisters::default(),
             ppu: PPU::new(),
             apu: APU::new(),
@@ -118,8 +120,8 @@ impl Bus {
             MappedAddress::WorkRamActiveBank(addr) => {
                 Ok(self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize])
             }
-            MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
-                "reading sprite attribute table".into(),
+            MappedAddress::ObjectAttributeTable(_addr) => Err(GbError::Unimplemented(
+                "reading object attribute table".into(),
             )),
             MappedAddress::NotUsable(addr) => {
                 log::warn!("Reading byte from unusable addr {:#06X}", addr);
@@ -151,11 +153,7 @@ impl Bus {
             MappedAddress::WorkRamActiveBank(addr) => {
                 self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize] = value;
             }
-            MappedAddress::SpriteAttributeTable(_addr) => {
-                return Err(GbError::Unimplemented(
-                    "writing to sprite attribute table".into(),
-                ));
-            }
+            MappedAddress::ObjectAttributeTable(addr) => self.oam.write_byte(addr, value)?,
             MappedAddress::NotUsable(addr) => {
                 log::warn!("Writing byte {:#04X} to unusable addr {:#06X}", value, addr);
             }
@@ -189,7 +187,7 @@ impl Bus {
             MappedAddress::WorkRamActiveBank(addr) => Ok(LittleEndian::read_u16(
                 &self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize..],
             )),
-            MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
+            MappedAddress::ObjectAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
             MappedAddress::NotUsable(addr) => {

@@ -25,8 +25,12 @@ pub const WRAM_ACTIVE_BANK_SIZE: usize =
 
 const ECHO_RAM_START: u16 = 0xE000;
 const ECHO_RAM_END: u16 = 0xFDFF;
-const OBJ_ATTRIBUTE_TABLE_START: u16 = 0xFE00;
+
+pub const OBJ_ATTRIBUTE_TABLE_START: u16 = 0xFE00;
 const OBJ_ATTRIBUTE_TABLE_END: u16 = 0xFE9F;
+pub const OBJ_ATTRIBUTE_TABLE_SIZE: usize =
+    (OBJ_ATTRIBUTE_TABLE_END - OBJ_ATTRIBUTE_TABLE_START + 1) as usize;
+
 const NOT_USABLE_RAM_START: u16 = 0xFEA0;
 const NOT_USABLE_RAM_END: u16 = 0xFEFF;
 
@@ -58,7 +62,7 @@ pub enum MappedAddress {
     WorkRamBank0(u16),
     WorkRamActiveBank(u16),
     //  EchoRam(u16),
-    SpriteAttributeTable(u16),
+    ObjectAttributeTable(u16),
     NotUsable(u16),
     TimerRegisters(u16),
     ApuRegisters(u16),
@@ -82,7 +86,7 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
             addr
         ))),
         OBJ_ATTRIBUTE_TABLE_START..=OBJ_ATTRIBUTE_TABLE_END => {
-            Ok(MappedAddress::SpriteAttributeTable(addr))
+            Ok(MappedAddress::ObjectAttributeTable(addr))
         }
         NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => Ok(MappedAddress::NotUsable(addr)),
         TIMER_REGISTERS_START..=TIMER_REGISTERS_END => Ok(MappedAddress::TimerRegisters(addr)),

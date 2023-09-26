@@ -12,6 +12,7 @@ pub mod ppu;
 pub mod timer;
 
 mod alu;
+mod oam;
 
 use thiserror::Error;
 
