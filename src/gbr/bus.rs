@@ -99,9 +99,10 @@ impl Bus {
                     Instruction::decode(&instr_data)
                 }
             }
-            _ => Err(GbError::Unimplemented(
-                "fetching instruction outside bank 0".into(),
-            )),
+            _ => Err(GbError::Unimplemented(format!(
+                "fetching instruction outside bank 0: {:#06X}",
+                addr
+            ))),
         }
     }
 

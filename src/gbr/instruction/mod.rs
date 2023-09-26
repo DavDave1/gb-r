@@ -15,7 +15,7 @@ pub enum InstructionType {
     MasterInterrupt(bool), // enable/disable
     Arithmetic(ArithmeticType),
     Jump(JumpCondition, JumpType),
-    Load(GenericRegType, SourceType),
+    Load(GenericRegType, SourceType, PostLoad),
     Store(DestType, SourceType, PostStore),
     Push(DoubleRegType),
     Pop(DoubleRegType),
@@ -228,6 +228,8 @@ pub enum PostStore {
     None,
 }
 
+pub type PostLoad = PostStore;
+
 impl Display for PostStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -267,6 +269,8 @@ impl Instruction {
         use SingleRegType::*;
         use SourceType::*;
 
+        type LE = LittleEndian;
+
         let opcode = Opcode::from_u8(memory[0]).ok_or(GbError::UnknownInstruction(memory[0]))?;
         let mut cb_opcode = None;
         let instr = match opcode {
@@ -291,6 +295,7 @@ impl Instruction {
             Opcode::SubAL => Arithmetic(Sub(A, L)),
             Opcode::RlA => Arithmetic(Rl(A, true)),
             Opcode::Andd8 => Arithmetic(And(A, OperandType::Imm(memory[1]))),
+            Opcode::AndB => Arithmetic(And(A, OperandType::Reg(B))),
             Opcode::OrC => Arithmetic(Or(A, OperandType::Reg(C))),
             Opcode::XorA => Arithmetic(Xor(A, A)),
             Opcode::Cpd8 => Arithmetic(Cmp(A, OperandType::Imm(memory[1]))),
@@ -298,18 +303,35 @@ impl Instruction {
             Opcode::Jr => Jump(Always, Relative(memory[1] as i8)),
             Opcode::Jrz => Jump(Zero, Relative(memory[1] as i8)),
             Opcode::Jrnz => Jump(NotZero, Relative(memory[1] as i8)),
-            Opcode::Jp => Jump(Always, Absolute(LittleEndian::read_u16(&memory[1..3]))),
-            Opcode::LdAd8 => Load(Single(A), Imm8(memory[1])),
-            Opcode::LdBd8 => Load(Single(B), Imm8(memory[1])),
-            Opcode::LdCd8 => Load(Single(C), Imm8(memory[1])),
-            Opcode::LdDd8 => Load(Single(D), Imm8(memory[1])),
-            Opcode::LdEd8 => Load(Single(E), Imm8(memory[1])),
-            Opcode::LdLd8 => Load(Single(L), Imm8(memory[1])),
-            Opcode::LdADE => Load(Single(A), RegAddr(DE)),
-            Opcode::LdSPd16 => Load(Double(SP), Imm16(LittleEndian::read_u16(&memory[1..3]))),
-            Opcode::LdBCd16 => Load(Double(BC), Imm16(LittleEndian::read_u16(&memory[1..3]))),
-            Opcode::LdDEd16 => Load(Double(DE), Imm16(LittleEndian::read_u16(&memory[1..3]))),
-            Opcode::LdHLd16 => Load(Double(HL), Imm16(LittleEndian::read_u16(&memory[1..3]))),
+            Opcode::Jp => Jump(Always, Absolute(LE::read_u16(&memory[1..3]))),
+            Opcode::LdAHLinc => Load(Single(A), RegAddr(HL), PostLoad::Inc),
+            Opcode::LdAd8 => Load(Single(A), Imm8(memory[1]), PostLoad::None),
+            Opcode::LdBd8 => Load(Single(B), Imm8(memory[1]), PostLoad::None),
+            Opcode::LdCd8 => Load(Single(C), Imm8(memory[1]), PostLoad::None),
+            Opcode::LdDd8 => Load(Single(D), Imm8(memory[1]), PostLoad::None),
+            Opcode::LdEd8 => Load(Single(E), Imm8(memory[1]), PostLoad::None),
+            Opcode::LdLd8 => Load(Single(L), Imm8(memory[1]), PostLoad::None),
+            Opcode::LdADE => Load(Single(A), RegAddr(DE), PostLoad::None),
+            Opcode::LdSPd16 => Load(
+                Double(SP),
+                Imm16(LE::read_u16(&memory[1..3])),
+                PostLoad::None,
+            ),
+            Opcode::LdBCd16 => Load(
+                Double(BC),
+                Imm16(LE::read_u16(&memory[1..3])),
+                PostLoad::None,
+            ),
+            Opcode::LdDEd16 => Load(
+                Double(DE),
+                Imm16(LE::read_u16(&memory[1..3])),
+                PostLoad::None,
+            ),
+            Opcode::LdHLd16 => Load(
+                Double(HL),
+                Imm16(LE::read_u16(&memory[1..3])),
+                PostLoad::None,
+            ),
             Opcode::LdHLincA => Store(DestType::RegAddr(HL), SourceType::RegImm(A), PostStore::Inc),
             Opcode::LdHLdecA => Store(DestType::RegAddr(HL), SourceType::RegImm(A), PostStore::Dec),
             Opcode::LdHLA => Store(
@@ -322,17 +344,18 @@ impl Instruction {
                 SourceType::Imm8(memory[1]),
                 PostStore::None,
             ),
-            Opcode::LdBA => Load(Single(B), RegImm(A)),
-            Opcode::LdCA => Load(Single(C), RegImm(A)),
-            Opcode::LdDA => Load(Single(D), RegImm(A)),
-            Opcode::LdHA => Load(Single(H), RegImm(A)),
-            Opcode::LdAB => Load(Single(A), RegImm(B)),
-            Opcode::LdAD => Load(Single(A), RegImm(D)),
-            Opcode::LdAE => Load(Single(A), RegImm(E)),
-            Opcode::LdAH => Load(Single(A), RegImm(H)),
-            Opcode::LdAL => Load(Single(A), RegImm(L)),
+            Opcode::LdBA => Load(Single(B), RegImm(A), PostLoad::None),
+            Opcode::LdCA => Load(Single(C), RegImm(A), PostLoad::None),
+            Opcode::LdDA => Load(Single(D), RegImm(A), PostLoad::None),
+            Opcode::LdHA => Load(Single(H), RegImm(A), PostLoad::None),
+            Opcode::LdHB => Load(Single(H), RegImm(B), PostLoad::None),
+            Opcode::LdAB => Load(Single(A), RegImm(B), PostLoad::None),
+            Opcode::LdAD => Load(Single(A), RegImm(D), PostLoad::None),
+            Opcode::LdAE => Load(Single(A), RegImm(E), PostLoad::None),
+            Opcode::LdAH => Load(Single(A), RegImm(H), PostLoad::None),
+            Opcode::LdAL => Load(Single(A), RegImm(L), PostLoad::None),
             Opcode::Lda16A => Store(
-                DestType::Addr(LittleEndian::read_u16(&memory[1..3])),
+                DestType::Addr(LE::read_u16(&memory[1..3])),
                 SourceType::RegImm(A),
                 PostStore::None,
             ),
@@ -341,7 +364,7 @@ impl Instruction {
                 SourceType::RegImm(A),
                 PostStore::None,
             ),
-            Opcode::LdhAa8 => Load(Single(A), SourceType::IoPortImm(memory[1])),
+            Opcode::LdhAa8 => Load(Single(A), SourceType::IoPortImm(memory[1]), PostLoad::None),
             Opcode::LdhCA => Store(
                 DestType::IoPortReg(C),
                 SourceType::RegImm(A),
@@ -351,7 +374,7 @@ impl Instruction {
             Opcode::PushDE => Push(DE),
             Opcode::PopBC => Pop(BC),
             Opcode::PopDE => Pop(DE),
-            Opcode::Calla16 => Call(CallMode::Absolute(LittleEndian::read_u16(&memory[1..3]))),
+            Opcode::Calla16 => Call(CallMode::Absolute(LE::read_u16(&memory[1..3]))),
             Opcode::Ret => Ret,
             Opcode::Prefix => {
                 cb_opcode = Some(
@@ -404,7 +427,7 @@ impl Display for Instruction {
             MasterInterrupt(enable) => write!(f, "IME {}", enable),
             Arithmetic(ar_type) => write!(f, "{}", ar_type),
             Jump(cond, jump_type) => write!(f, "J {}, {}", cond, jump_type),
-            Load(reg, source) => write!(f, "Load {} {}", reg, source),
+            Load(reg, source, post_load) => write!(f, "Load {} {} {}", reg, source, post_load),
             Store(dest, reg, post_store) => write!(f, "Store {} {} {}", dest, reg, post_store),
             Push(reg) => write!(f, "Push {}", reg),
             Pop(reg) => write!(f, "Pop {}", reg),

@@ -6,7 +6,7 @@ use crate::gbr::GbError;
 
 use super::instruction::{
     CallMode, DestType, DoubleRegType, GenericRegType, InstructionType, JumpCondition, JumpType,
-    PostStore, SingleRegType, SourceType,
+    PostLoad, PostStore, SingleRegType, SourceType,
 };
 
 #[derive(Default, Clone)]
@@ -256,6 +256,7 @@ impl CPU {
         bus: &Bus,
         reg: &GenericRegType,
         source: &SourceType,
+        post_load: &PostLoad,
     ) -> Result<(), GbError> {
         match reg {
             GenericRegType::Double(reg) => match source {
@@ -279,6 +280,12 @@ impl CPU {
 
                 self.write_single_reg(reg, val);
             }
+        }
+
+        match post_load {
+            PostStore::Inc => self.write_hl(self.read_hl() + 1),
+            PostStore::Dec => self.write_hl(self.read_hl() - 1),
+            PostStore::None => (),
         }
         Ok(())
     }
@@ -347,7 +354,9 @@ impl CPU {
             InstructionType::Jump(condition, jump_type) => {
                 jumped = self.jump(condition, jump_type);
             }
-            InstructionType::Load(reg, source) => self.load(bus, reg, source)?,
+            InstructionType::Load(reg, source, post_load) => {
+                self.load(bus, reg, source, post_load)?
+            }
             InstructionType::Store(dest, src, post_store) => {
                 self.store(bus, dest, src, post_store)?
             }
