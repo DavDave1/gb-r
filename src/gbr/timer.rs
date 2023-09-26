@@ -7,6 +7,11 @@ const CPU_FREQ: u64 = 4_194_304; // Hz
 const DIVIDER_FREQ: u64 = 16_384; // Hz
 const DIVIDER_COUNTS_PER_CYCLE: u64 = CPU_FREQ / DIVIDER_FREQ;
 
+const DIVIDER_REG_ADDR: u16 = 0xFF04;
+const COUNTER_REG_ADDR: u16 = 0xFF05;
+const MODULO_REG_ADDR: u16 = 0xFF06;
+const CONTROL_REG_ADDR: u16 = 0xFF07;
+
 #[derive(Default, Copy, Clone)]
 pub enum ClockSelect {
     #[default]
@@ -74,10 +79,10 @@ impl Timer {
 
     pub fn write_reg(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match addr {
-            0x0004 => self.divider = 0,
-            0x0005 => self.counter = value,
-            0x0006 => self.modulo = value,
-            0x0007 => {
+            DIVIDER_REG_ADDR => self.divider = 0,
+            COUNTER_REG_ADDR => self.counter = value,
+            MODULO_REG_ADDR => self.modulo = value,
+            CONTROL_REG_ADDR => {
                 self.enable = (value & 0b00000100) != 0;
                 self.clock_select = (value & 0b00000011).into();
             }
@@ -94,10 +99,10 @@ impl Timer {
 
     pub fn read_reg(&self, addr: u16) -> Result<u8, GbError> {
         match addr {
-            0x0004 => Ok(self.divider),
-            0x0005 => Ok(self.counter),
-            0x0006 => Ok(self.modulo),
-            0x0007 => Ok((self.enable as u8) << 3 | self.clock_select as u8),
+            DIVIDER_REG_ADDR => Ok(self.divider),
+            COUNTER_REG_ADDR => Ok(self.counter),
+            MODULO_REG_ADDR => Ok(self.modulo),
+            CONTROL_REG_ADDR => Ok((self.enable as u8) << 3 | self.clock_select as u8),
             _ => Err(GbError::IllegalOp(format!(
                 "Read from timer reg {:#06X}",
                 addr

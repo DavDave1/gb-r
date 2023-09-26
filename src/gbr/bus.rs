@@ -3,8 +3,8 @@ use std::{fs, path::PathBuf};
 use byteorder::{ByteOrder, LittleEndian};
 
 use super::{
-    apu::APU, cart_header::CartHeader, instruction::Instruction, interrupts::InterruptHandler,
-    io_registers::IORegisters, mbc::MBC, memory_map::*, ppu::PPU, timer::Timer, GbError,
+    apu::APU, instruction::Instruction, interrupts::InterruptHandler, io_registers::IORegisters,
+    mbc::MBC, memory_map::*, ppu::PPU, timer::Timer, GbError,
 };
 
 pub struct Bus {
@@ -38,9 +38,9 @@ impl Bus {
         Bus {
             boot_rom_lock: true,
             boot_rom: boot_rom.into_boxed_slice(),
-            hram: vec![0; HIGH_RAM_SIZE].into_boxed_slice(),
-            wram: vec![0; WORK_RAM_BANK0_SIZE].into_boxed_slice(),
-            wram_acv_bank: vec![0; WORK_RAM_ACTIVE_BANK_SIZE].into_boxed_slice(),
+            hram: vec![0; HRAM_SIZE].into_boxed_slice(),
+            wram: vec![0; WRAM_BANK0_SIZE].into_boxed_slice(),
+            wram_acv_bank: vec![0; WRAM_ACTIVE_BANK_SIZE].into_boxed_slice(),
             io_registers: IORegisters::default(),
             ppu: PPU::new(),
             apu: APU::new(),
@@ -114,8 +114,10 @@ impl Bus {
             }
             MappedAddress::VideoRam(addr) => self.ppu.read_byte(addr),
             MappedAddress::CartRam(addr) => self.mbc.read_byte(addr),
-            MappedAddress::WorkRamBank0(addr) => Ok(self.wram[addr as usize]),
-            MappedAddress::WorkRamActiveBank(addr) => Ok(self.wram_acv_bank[addr as usize]),
+            MappedAddress::WorkRamBank0(addr) => Ok(self.wram[(addr - WRAM_BANK0_START) as usize]),
+            MappedAddress::WorkRamActiveBank(addr) => {
+                Ok(self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize])
+            }
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
@@ -144,10 +146,10 @@ impl Bus {
             MappedAddress::VideoRam(addr) => self.ppu.write_byte(addr, value)?,
             MappedAddress::CartRam(addr) => self.mbc.write_byte(addr, value)?,
             MappedAddress::WorkRamBank0(addr) => {
-                self.wram[addr as usize] = value;
+                self.wram[(addr - WRAM_BANK0_START) as usize] = value;
             }
             MappedAddress::WorkRamActiveBank(addr) => {
-                self.wram_acv_bank[addr as usize] = value;
+                self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize] = value;
             }
             MappedAddress::SpriteAttributeTable(_addr) => {
                 return Err(GbError::Unimplemented(
@@ -162,7 +164,7 @@ impl Bus {
             MappedAddress::PpuRegisters(addr) => self.ppu.write_reg(addr, value)?,
             MappedAddress::BootRomLockRegister => self.boot_rom_lock = false,
             MappedAddress::IORegisters(addr) => self.io_registers.write(addr, value)?,
-            MappedAddress::HighRam(addr) => self.hram[addr as usize] = value,
+            MappedAddress::HighRam(addr) => self.hram[(addr - HRAM_START) as usize] = value,
             MappedAddress::InterruptFlagRegister => self.ir_handler.write_if(value),
             MappedAddress::InterruptEnableRegister => self.ir_handler.write_ie(value),
         }
@@ -184,9 +186,9 @@ impl Bus {
             MappedAddress::WorkRamBank0(_addr) => {
                 Err(GbError::Unimplemented("reading from work ram 0".into()))
             }
-            MappedAddress::WorkRamActiveBank(addr) => {
-                Ok(LittleEndian::read_u16(&self.wram_acv_bank[addr as usize..]))
-            }
+            MappedAddress::WorkRamActiveBank(addr) => Ok(LittleEndian::read_u16(
+                &self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize..],
+            )),
             MappedAddress::SpriteAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
@@ -209,7 +211,9 @@ impl Bus {
             MappedAddress::IORegisters(_addr) => {
                 Err(GbError::Unimplemented("reading IO registers".into()))
             }
-            MappedAddress::HighRam(addr) => Ok(LittleEndian::read_u16(&self.hram[addr as usize..])),
+            MappedAddress::HighRam(addr) => Ok(LittleEndian::read_u16(
+                &self.hram[(addr - HRAM_START) as usize..],
+            )),
             MappedAddress::InterruptFlagRegister => {
                 Err(GbError::IllegalOp("reading interrupt flag register".into()))
             }

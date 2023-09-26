@@ -4,6 +4,14 @@ use sound_channel::{Channel1, Channel2, Channel3, Channel4};
 
 use super::GbError;
 
+const WAVE_AND_TIMER_REG_ADDR: u16 = 0xFF11;
+const ENVELOPE_REG_ADDR: u16 = 0xFF12;
+const PERIOD_LOW_REG_ADDR: u16 = 0xFF13;
+const PERIOD_HIGH_AND_CTRL_REG_ADDR: u16 = 0xFF14;
+const VOLUME_CTRL_REG_ADDR: u16 = 0xFF24;
+const OUTPUT_SELECT_REG_ADDR: u16 = 0xFF25;
+const SOUND_ENABLE_REG_ADDR: u16 = 0xFF26;
+
 pub struct APU {
     sound_enable: u8,
     sound_output_terminal_selection: u8,
@@ -43,13 +51,13 @@ impl APU {
 
     pub fn write_reg(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match addr {
-            0x0011 => self.ch1.write_wave_and_timer(value),
-            0x0012 => self.ch1.write_envelope(value),
-            0x0013 => self.ch1.write_period_low(value),
-            0x0014 => self.ch1.write_period_high_and_ctrl(value),
-            0x0024 => self.sound_channel_volume_control = value,
-            0x0025 => self.sound_output_terminal_selection = value,
-            0x0026 => {
+            WAVE_AND_TIMER_REG_ADDR => self.ch1.write_wave_and_timer(value),
+            ENVELOPE_REG_ADDR => self.ch1.write_envelope(value),
+            PERIOD_LOW_REG_ADDR => self.ch1.write_period_low(value),
+            PERIOD_HIGH_AND_CTRL_REG_ADDR => self.ch1.write_period_high_and_ctrl(value),
+            VOLUME_CTRL_REG_ADDR => self.sound_channel_volume_control = value,
+            OUTPUT_SELECT_REG_ADDR => self.sound_output_terminal_selection = value,
+            SOUND_ENABLE_REG_ADDR => {
                 if value & 0x7F != 0 {
                     return Err(GbError::IllegalOp(format!(
                         "attempting to write {:#04X} to sound enable register (NR52)",

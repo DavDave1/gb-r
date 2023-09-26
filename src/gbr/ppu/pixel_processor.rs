@@ -130,8 +130,6 @@ impl PixelProcessor {
             tile_y -= 8;
         }
 
-        // let tile_y = viewport.1.wrapping_add(ly) as u16;
-
         self.curr_tile_line = (tile_y % 8) as u8;
         let tilemap_addr = tile_y / 8 * 32 + tile_x / 8;
 

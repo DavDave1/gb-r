@@ -16,7 +16,7 @@ use self::{
     tile::Tile,
 };
 use crate::gbr::{
-    memory_map::{VIDEO_RAM_SIZE, VIDEO_RAM_START},
+    memory_map::{VRAM_SIZE, VRAM_START},
     GbError,
 };
 
@@ -28,11 +28,7 @@ const TILE_BLOCK1_END: u16 = 0x0FFF;
 const TILE_BLOCK2_START: u16 = TILE_BLOCK1_END + 2;
 const TILE_BLOCK2_END: u16 = 0x17FF;
 
-const TILEMAP_BLOCK0_START: u16 = 0x9800 - VIDEO_RAM_START;
-const TILEMAP_BLOCK0_END: u16 = 0x9BFF - VIDEO_RAM_START;
-
-const TILEMAP_BLOCK1_START: u16 = 0x9C00 - VIDEO_RAM_START;
-const TILEMAP_BLOCK1_END: u16 = 0x9FFF - VIDEO_RAM_START;
+const TILEMAP_BLOCK0_START: u16 = 0x9800 - VRAM_START;
 
 pub const SCREEN_WIDTH: u32 = 160;
 pub const SCREEN_HEIGHT: u32 = 144;
@@ -47,10 +43,21 @@ const VBLANK_LINE: u8 = 144;
 const LAST_LINE: u8 = 153;
 
 const MODE_2_DOTS: u16 = 80;
-const MODE_3_DOTS_MIN: u16 = MODE_2_DOTS + 172;
 const MODE_3_DOTS_MAX: u16 = MODE_2_DOTS + 289;
 
 const DOTS_PER_LINE: u16 = 456;
+
+const LCD_CTRL_REG_ADDR: u16 = 0xFF40;
+const LCD_STAT_REG_ADDR: u16 = 0xFF41;
+const VIEWPORT_Y_REG_ADDR: u16 = 0xFF42;
+const VIEWPORT_X_REG_ADDR: u16 = 0xFF43;
+const LY_REG_ADDR: u16 = 0xFF44;
+const LYC_REG_ADDR: u16 = 0xFF45;
+const BG_PALETTE_REG_ADDR: u16 = 0xFF47;
+const OBJ_PALETTE0_REG_ADDR: u16 = 0xFF48;
+const OBJ_PALETTE1_REG_ADDR: u16 = 0xFF49;
+const WIN_POS_Y_REG_ADDR: u16 = 0xFF4A;
+const WIN_POS_X_REG_ADDR: u16 = 0xFF4B;
 
 pub type ScreenBuffer = Vec<u8>;
 pub type TileList = Vec<Tile>;
@@ -95,7 +102,7 @@ pub struct PPU {
 impl PPU {
     pub fn new() -> Self {
         Self {
-            vram: vec![0; VIDEO_RAM_SIZE].into_boxed_slice(),
+            vram: vec![0; VRAM_SIZE].into_boxed_slice(),
             lcd_control: LcdControlRegister::default(),
             lcd_status: LcsStatusRegister::default(),
             bg_palette: Default::default(),
@@ -186,15 +193,11 @@ impl PPU {
     }
 
     pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
-        if addr as usize >= VIDEO_RAM_SIZE {
-            return Err(GbError::AddrOutOfBounds(addr));
-        }
-
         if self.lcd_control.display_enable {
             return Ok(0xFF);
         }
 
-        Ok(self.vram[addr as usize])
+        Ok(self.vram[(addr - VRAM_START) as usize])
     }
 
     pub fn read_word(&self, addr: u16) -> Result<u16, GbError> {
@@ -202,20 +205,14 @@ impl PPU {
             return Ok(0xFFFF);
         }
 
-        if addr as usize >= VIDEO_RAM_SIZE - 1 {
-            return Err(GbError::AddrOutOfBounds(addr));
-        }
-
-        Ok(LittleEndian::read_u16(&self.vram[addr as usize..]))
+        Ok(LittleEndian::read_u16(
+            &self.vram[(addr - VRAM_START) as usize..],
+        ))
     }
 
     pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
-        if addr as usize >= VIDEO_RAM_SIZE {
-            return Err(GbError::AddrOutOfBounds(addr));
-        }
-
         if !self.lcd_control.display_enable {
-            self.vram[addr as usize] = value;
+            self.vram[(addr - VRAM_START) as usize] = value;
             self.update_tile_list();
         }
 
@@ -224,15 +221,17 @@ impl PPU {
 
     pub fn read_reg(&self, addr: u16) -> Result<u8, GbError> {
         match addr {
-            0x0040 => Ok(self.lcd_control.into()),
-            0x0041 => Ok(self.lcd_status.into()),
-            0x0042 => Ok(self.viewport.y),
-            0x0043 => Ok(self.viewport.x),
-            0x0044 => Ok(self.ly),
-            0x0045 => Ok(self.lyc),
-            0x0047 => Ok(self.bg_palette.into()),
-            0x0048 => Ok(self.obj_palette0.into()),
-            0x0049 => Ok(self.obj_palette1.into()),
+            LCD_CTRL_REG_ADDR => Ok(self.lcd_control.into()),
+            LCD_STAT_REG_ADDR => Ok(self.lcd_status.into()),
+            VIEWPORT_Y_REG_ADDR => Ok(self.viewport.y),
+            VIEWPORT_X_REG_ADDR => Ok(self.viewport.x),
+            LY_REG_ADDR => Ok(self.ly),
+            LYC_REG_ADDR => Ok(self.lyc),
+            BG_PALETTE_REG_ADDR => Ok(self.bg_palette.into()),
+            OBJ_PALETTE0_REG_ADDR => Ok(self.obj_palette0.into()),
+            OBJ_PALETTE1_REG_ADDR => Ok(self.obj_palette1.into()),
+            WIN_POS_Y_REG_ADDR => Ok(self.win_pos.y),
+            WIN_POS_X_REG_ADDR => Ok(self.win_pos.x),
             _ => Err(GbError::IllegalOp(format!(
                 "Write to invalid PPU reg {:#06X}",
                 addr
@@ -242,17 +241,17 @@ impl PPU {
 
     pub fn write_reg(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match addr {
-            0x0040 => self.lcd_control = value.into(),
-            0x0041 => self.lcd_status = value.into(),
-            0x0042 => self.viewport.y = value,
-            0x0043 => self.viewport.x = value,
-            0x0044 => return Err(GbError::IllegalOp("Cannot write to LY register".into())),
-            0x0045 => self.lyc = value,
-            0x0047 => self.bg_palette = value.into(),
-            0x0048 => self.obj_palette0 = value.into(),
-            0x0049 => self.obj_palette1 = value.into(),
-            0x004A => self.win_pos.y = value,
-            0x004B => self.win_pos.x = value,
+            LCD_CTRL_REG_ADDR => self.lcd_control = value.into(),
+            LCD_STAT_REG_ADDR => self.lcd_status = value.into(),
+            VIEWPORT_Y_REG_ADDR => self.viewport.y = value,
+            VIEWPORT_X_REG_ADDR => self.viewport.x = value,
+            LY_REG_ADDR => return Err(GbError::IllegalOp("Cannot write to LY register".into())),
+            LYC_REG_ADDR => self.lyc = value,
+            BG_PALETTE_REG_ADDR => self.bg_palette = value.into(),
+            OBJ_PALETTE0_REG_ADDR => self.obj_palette0 = value.into(),
+            OBJ_PALETTE1_REG_ADDR => self.obj_palette1 = value.into(),
+            WIN_POS_Y_REG_ADDR => self.win_pos.y = value,
+            WIN_POS_X_REG_ADDR => self.win_pos.x = value,
             _ => {
                 return Err(GbError::IllegalOp(format!(
                     "Write to invalid PPU reg {:#06X}",
@@ -318,7 +317,7 @@ impl PPU {
         for (addr, data) in self.vram.chunks_exact(BYTES_PER_LINE).enumerate() {
             dump.push_str(&format!(
                 "{:#06X}: ",
-                VIDEO_RAM_START as usize + addr * BYTES_PER_LINE
+                VRAM_START as usize + addr * BYTES_PER_LINE
             ));
 
             for b in 0..BYTES_PER_LINE {
