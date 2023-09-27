@@ -4,10 +4,22 @@ use sound_channel::{Channel1, Channel2, Channel3, Channel4};
 
 use super::GbError;
 
-const WAVE_AND_TIMER_REG_ADDR: u16 = 0xFF11;
-const ENVELOPE_REG_ADDR: u16 = 0xFF12;
-const PERIOD_LOW_REG_ADDR: u16 = 0xFF13;
-const PERIOD_HIGH_AND_CTRL_REG_ADDR: u16 = 0xFF14;
+const CH1_SWEEP_REG_ADDR: u16 = 0xFF10;
+const CH1_WAVE_AND_TIMER_REG_ADDR: u16 = 0xFF11;
+const CH1_ENVELOPE_REG_ADDR: u16 = 0xFF12;
+const CH1_PERIOD_LOW_REG_ADDR: u16 = 0xFF13;
+const CH1_PERIOD_HIGH_AND_CTRL_REG_ADDR: u16 = 0xFF14;
+
+const CH2_WAVE_AND_TIMER_REG_ADDR: u16 = 0xFF16;
+const CH2_ENVELOPE_REG_ADDR: u16 = 0xFF17;
+const CH2_PERIOD_LOW_REG_ADDR: u16 = 0xFF18;
+const CH2_PERIOD_HIGH_AND_CTRL_REG_ADDR: u16 = 0xFF19;
+
+const CH3_DAC_ENABLE_REG_ADDR: u16 = 0xFF1A;
+
+const CH4_ENVELOPE_REG_ADDR: u16 = 0xFF21;
+const CH4_CONTROL_REG_ADDR: u16 = 0xFF23;
+
 const VOLUME_CTRL_REG_ADDR: u16 = 0xFF24;
 const OUTPUT_SELECT_REG_ADDR: u16 = 0xFF25;
 const SOUND_ENABLE_REG_ADDR: u16 = 0xFF26;
@@ -51,10 +63,18 @@ impl APU {
 
     pub fn write_reg(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match addr {
-            WAVE_AND_TIMER_REG_ADDR => self.ch1.write_wave_and_timer(value),
-            ENVELOPE_REG_ADDR => self.ch1.write_envelope(value),
-            PERIOD_LOW_REG_ADDR => self.ch1.write_period_low(value),
-            PERIOD_HIGH_AND_CTRL_REG_ADDR => self.ch1.write_period_high_and_ctrl(value),
+            CH1_SWEEP_REG_ADDR => self.ch1.write_sweep(value),
+            CH1_WAVE_AND_TIMER_REG_ADDR => self.ch1.write_wave_and_timer(value),
+            CH1_ENVELOPE_REG_ADDR => self.ch1.write_envelope(value),
+            CH1_PERIOD_LOW_REG_ADDR => self.ch1.write_period_low(value),
+            CH1_PERIOD_HIGH_AND_CTRL_REG_ADDR => self.ch1.write_period_high_and_ctrl(value),
+            CH2_WAVE_AND_TIMER_REG_ADDR => self.ch2.write_wave_and_timer(value),
+            CH2_ENVELOPE_REG_ADDR => self.ch2.write_envelope(value),
+            CH2_PERIOD_LOW_REG_ADDR => self.ch2.write_period_low(value),
+            CH2_PERIOD_HIGH_AND_CTRL_REG_ADDR => self.ch2.write_period_high_and_ctrl(value),
+            CH3_DAC_ENABLE_REG_ADDR => self.ch3.write_enable(value),
+            CH4_ENVELOPE_REG_ADDR => self.ch4.write_envelope(value),
+            CH4_CONTROL_REG_ADDR => self.ch4.write_control(value),
             VOLUME_CTRL_REG_ADDR => self.sound_channel_volume_control = value,
             OUTPUT_SELECT_REG_ADDR => self.sound_output_terminal_selection = value,
             SOUND_ENABLE_REG_ADDR => {

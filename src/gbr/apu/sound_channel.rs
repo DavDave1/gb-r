@@ -57,6 +57,18 @@ pub struct Sweep {
     slope_ctrl: u8,
 }
 
+impl Sweep {
+    fn write(&mut self, value: u8) {
+        self.slope_ctrl = value & 0b00000111;
+        self.direction = if value & 0b00001000 != 0 {
+            SweepDirection::Decrease
+        } else {
+            SweepDirection::Increase
+        };
+        self.pace = (value & 0b01110000) >> 4;
+    }
+}
+
 #[derive(Default)]
 pub struct Envelope {
     volume: u8,
@@ -97,6 +109,10 @@ impl Pulse {
     pub fn write_period_high(&mut self, period_high: u8) {
         let period_high = (period_high & 0b00000111) as u16;
         self.period = period_high << 8 + self.period & 0x00FF;
+    }
+
+    pub fn write_envelope(&mut self, value: u8) {
+        self.envelope.write(value);
     }
 }
 
@@ -147,12 +163,16 @@ pub struct Channel1 {
 }
 
 impl Channel1 {
+    pub fn write_sweep(&mut self, value: u8) {
+        self.sweep.write(value);
+    }
+
     pub fn write_wave_and_timer(&mut self, value: u8) {
         self.pulse.write_wave_and_timer(value);
     }
 
     pub fn write_envelope(&mut self, value: u8) {
-        self.pulse.envelope.write(value);
+        self.pulse.write_envelope(value);
     }
 
     pub fn write_period_low(&mut self, value: u8) {
@@ -171,6 +191,25 @@ pub struct Channel2 {
     ctrl: ChannelControl,
 }
 
+impl Channel2 {
+    pub fn write_wave_and_timer(&mut self, value: u8) {
+        self.pulse.write_wave_and_timer(value);
+    }
+
+    pub fn write_envelope(&mut self, value: u8) {
+        self.pulse.write_envelope(value);
+    }
+
+    pub fn write_period_low(&mut self, value: u8) {
+        self.pulse.write_period_low(value);
+    }
+
+    pub fn write_period_high_and_ctrl(&mut self, value: u8) {
+        self.pulse.write_period_high(value);
+        self.ctrl.write(value);
+    }
+}
+
 #[derive(Default)]
 pub struct Channel3 {
     enable: bool,
@@ -181,6 +220,12 @@ pub struct Channel3 {
     wave_pattern: [u8; 2],
 }
 
+impl Channel3 {
+    pub fn write_enable(&mut self, value: u8) {
+        self.enable = value & 0b10000000 != 0;
+    }
+}
+
 #[derive(Default)]
 pub struct Channel4 {
     envelope: Envelope,
@@ -188,4 +233,14 @@ pub struct Channel4 {
     clock_divider: u8,
     lfsr_width: LfsrWidth,
     control: ChannelControl,
+}
+
+impl Channel4 {
+    pub fn write_envelope(&mut self, value: u8) {
+        self.envelope.write(value);
+    }
+
+    pub fn write_control(&mut self, value: u8) {
+        self.control.write(value);
+    }
 }
