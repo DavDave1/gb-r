@@ -70,7 +70,7 @@ impl MBC {
 
         let header_rom_size = ROM_BANK_SIZE * header.rom_banks() as usize;
 
-        if header_rom_size < rom.len() {
+        if header_rom_size != rom.len() {
             return Err(GbError::HeaderParsing(format!("invalid rom size")));
         }
 
@@ -111,7 +111,6 @@ impl MBC {
     pub fn write_byte(&mut self, addr: u16, byte: u8) -> Result<(), GbError> {
         match addr {
             RAM_ENABLE_REG_START..=RAM_ENABLE_REG_END => {
-                log::debug!("Writing {} to ram enable reg", byte);
                 self.ram_enable = (byte & 0b1111) == RAM_ENABLE_NUMBER;
             }
             BANK_REG1_START..=BANK_REG1_END => {
@@ -172,7 +171,8 @@ impl MBC {
     }
 
     fn rom_relative_addr(&self, abs_addr: u16) -> usize {
-        (abs_addr - CART_ROM_BANK0_START) as usize + self.active_rom_bank as usize * ROM_BANK_SIZE
+        (abs_addr - CART_ROM_BANK0_START) as usize
+            + (self.active_rom_bank - 1) as usize * ROM_BANK_SIZE
     }
 
     pub fn state(&self) -> MbcState {
