@@ -103,8 +103,8 @@ impl Bus {
                     Instruction::decode(&instr_data)
                 }
             }
-            _ => Err(GbError::Unimplemented(format!(
-                "fetching instruction outside bank 0: {:#06X}",
+            _ => Err(GbError::IllegalOp(format!(
+                "fetching instruction outside ROM addr space: {:#06X}",
                 addr
             ))),
         }
@@ -140,7 +140,7 @@ impl Bus {
                 "reading from boot rom lock register".into(),
             )),
             MappedAddress::IORegisters(addr) => self.io_registers.read(addr),
-            MappedAddress::HighRam(addr) => Ok(self.hram[addr as usize]),
+            MappedAddress::HighRam(addr) => Ok(self.hram[(addr - HRAM_START) as usize]),
             MappedAddress::InterruptFlagRegister => Err(GbError::Unimplemented(
                 "reading interrupt flag register".into(),
             )),
@@ -188,9 +188,9 @@ impl Bus {
             }
             MappedAddress::VideoRam(addr) => self.ppu.read_word(addr),
             MappedAddress::CartRam(_addr) => self.mbc.read_word(addr),
-            MappedAddress::WorkRamBank0(_addr) => {
-                Err(GbError::Unimplemented("reading from work ram 0".into()))
-            }
+            MappedAddress::WorkRamBank0(_addr) => Ok(LittleEndian::read_u16(
+                &self.wram[(addr - WRAM_BANK0_START) as usize..],
+            )),
             MappedAddress::WorkRamActiveBank(addr) => Ok(LittleEndian::read_u16(
                 &self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize..],
             )),
