@@ -2,6 +2,7 @@ pub mod apu;
 pub mod bus;
 pub mod cart_header;
 pub mod cpu;
+pub mod dma;
 pub mod game_boy;
 pub mod instruction;
 pub mod interrupts;

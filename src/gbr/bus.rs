@@ -3,8 +3,9 @@ use std::{fs, path::PathBuf};
 use byteorder::{ByteOrder, LittleEndian};
 
 use super::{
-    apu::APU, instruction::Instruction, interrupts::InterruptHandler, io_registers::IORegisters,
-    mbc::MBC, memory_map::*, oam::ObjAttributeMemory, ppu::PPU, timer::Timer, GbError,
+    apu::APU, dma::DMA, instruction::Instruction, interrupts::InterruptHandler,
+    io_registers::IORegisters, mbc::MBC, memory_map::*, oam::ObjAttributeMemory, ppu::PPU,
+    timer::Timer, GbError,
 };
 
 pub struct Bus {
@@ -20,6 +21,7 @@ pub struct Bus {
     ir_handler: InterruptHandler,
     timer: Timer,
     mbc: MBC,
+    dma: DMA,
 }
 
 impl Bus {
@@ -49,10 +51,12 @@ impl Bus {
             ir_handler: InterruptHandler::default(),
             timer: Timer::default(),
             mbc,
+            dma: DMA::new(),
         }
     }
 
     pub fn step(&mut self, cycles: u8) -> Result<bool, GbError> {
+        self.dma.step(&self.ppu, &self.mbc, &mut self.oam, cycles)?;
         self.timer.step(cycles, &mut self.ir_handler);
         self.apu.step(cycles)?;
         self.ppu.step(cycles)
@@ -131,6 +135,7 @@ impl Bus {
             MappedAddress::TimerRegisters(addr) => self.timer.read_reg(addr),
             MappedAddress::ApuRegisters(addr) => self.apu.read_reg(addr),
             MappedAddress::PpuRegisters(addr) => self.ppu.read_reg(addr),
+            MappedAddress::DmaRegister => Ok(self.dma.read_reg()),
             MappedAddress::BootRomLockRegister => Err(GbError::IllegalOp(
                 "reading from boot rom lock register".into(),
             )),
@@ -161,6 +166,7 @@ impl Bus {
             MappedAddress::TimerRegisters(addr) => self.timer.write_reg(addr, value)?,
             MappedAddress::ApuRegisters(addr) => self.apu.write_reg(addr, value)?,
             MappedAddress::PpuRegisters(addr) => self.ppu.write_reg(addr, value)?,
+            MappedAddress::DmaRegister => self.dma.write_reg(value),
             MappedAddress::BootRomLockRegister => self.boot_rom_lock = false,
             MappedAddress::IORegisters(addr) => self.io_registers.write(addr, value)?,
             MappedAddress::HighRam(addr) => self.hram[(addr - HRAM_START) as usize] = value,
@@ -203,6 +209,9 @@ impl Bus {
             }
             MappedAddress::PpuRegisters(_addr) => {
                 Err(GbError::IllegalOp("read word from PPU registers".into()))
+            }
+            MappedAddress::DmaRegister => {
+                Err(GbError::IllegalOp("read word from DMA register".into()))
             }
             MappedAddress::BootRomLockRegister => Err(GbError::IllegalOp(
                 "reading from boot rom lock register".into(),

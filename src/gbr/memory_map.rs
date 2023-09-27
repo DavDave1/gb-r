@@ -8,7 +8,7 @@ pub const CART_ROM_ACTIVE_BANK_START: u16 = 0x4000;
 pub const CART_ROM_ACTIVE_BANK_END: u16 = 0x7FFF;
 
 pub const VRAM_START: u16 = 0x8000;
-const VRAM_END: u16 = 0x9FFF;
+pub const VRAM_END: u16 = 0x9FFF;
 pub const VRAM_SIZE: usize = (VRAM_END - VRAM_START + 1) as usize;
 
 pub const CART_RAM_START: u16 = 0xA000;
@@ -43,8 +43,13 @@ pub const TIMER_REGISTERS_END: u16 = 0xFF07;
 pub const APU_REGISTERS_START: u16 = 0xFF10;
 pub const APU_REGISTERS_END: u16 = 0xFF3F;
 
-pub const PPU_REGISTERS_START: u16 = 0xFF40;
-pub const PPU_REGISTERS_END: u16 = 0xFF4B;
+pub const PPU_REGISTERS_LOW_START: u16 = 0xFF40;
+pub const PPU_REGISTERS_LOW_END: u16 = 0xFF45;
+
+pub const DMA_REGISTER: u16 = 0xFF46;
+
+pub const PPU_REGISTERS_HIGH_START: u16 = 0xFF47;
+pub const PPU_REGISTERS_HIGH_END: u16 = 0xFF4B;
 
 const BOOT_ROM_LOCK_REGISTER: u16 = 0xFF50;
 
@@ -67,6 +72,7 @@ pub enum MappedAddress {
     TimerRegisters(u16),
     ApuRegisters(u16),
     PpuRegisters(u16),
+    DmaRegister,
     BootRomLockRegister,
     IORegisters(u16),
     HighRam(u16),
@@ -91,7 +97,9 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
         NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => Ok(MappedAddress::NotUsable(addr)),
         TIMER_REGISTERS_START..=TIMER_REGISTERS_END => Ok(MappedAddress::TimerRegisters(addr)),
         APU_REGISTERS_START..=APU_REGISTERS_END => Ok(MappedAddress::ApuRegisters(addr)),
-        PPU_REGISTERS_START..=PPU_REGISTERS_END => Ok(MappedAddress::PpuRegisters(addr)),
+        PPU_REGISTERS_LOW_START..=PPU_REGISTERS_LOW_END => Ok(MappedAddress::PpuRegisters(addr)),
+        DMA_REGISTER => Ok(MappedAddress::DmaRegister),
+        PPU_REGISTERS_HIGH_START..=PPU_REGISTERS_HIGH_END => Ok(MappedAddress::PpuRegisters(addr)),
         BOOT_ROM_LOCK_REGISTER => Ok(MappedAddress::BootRomLockRegister),
         INTERRUPTS_FLAG_REGISTER => Ok(MappedAddress::InterruptFlagRegister),
         IO_REGISTERS_START..=IO_REGISTERS_END => Ok(MappedAddress::IORegisters(addr)),
