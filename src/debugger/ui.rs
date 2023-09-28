@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use egui::ClippedPrimitive;
 use egui::{Context, TexturesDelta, TopBottomPanel};
+use egui_tracing::EventCollector;
 use egui_wgpu::renderer::ScreenDescriptor;
 use egui_wgpu::Renderer;
 use flume::Receiver;
@@ -22,6 +23,7 @@ use super::{asm_view, cpu_view, mbc_view};
 use super::{interrupts_view, io_registers_view};
 
 struct UiState {
+    collector: EventCollector,
     show_asm_view: bool,
     show_cpu_view: bool,
     show_registers_view: bool,
@@ -39,12 +41,14 @@ struct UiState {
 
 impl UiState {
     fn new(
+        collector: EventCollector,
         gb_state: Arc<RwLock<GbState>>,
         cmd_sig: Sender<DebuggerCommand>,
         emu_state_slot: Receiver<EmuState>,
         asm: AsmState,
     ) -> Self {
         Self {
+            collector,
             show_asm_view: true,
             show_cpu_view: true,
             show_registers_view: true,
@@ -202,6 +206,12 @@ impl UiState {
                     });
                 });
             });
+
+        egui::TopBottomPanel::bottom("tracing")
+            .exact_height(240.0)
+            .show(ctx, |ui| {
+                ui.add(egui_tracing::Logs::new(self.collector.clone()))
+            });
     }
 }
 
@@ -217,6 +227,7 @@ pub struct Ui {
 
 impl Ui {
     pub fn new<T>(
+        collector: EventCollector,
         gb_state: Arc<RwLock<GbState>>,
         cmd_sig: Sender<DebuggerCommand>,
         emu_state_slot: Receiver<EmuState>,
@@ -247,7 +258,7 @@ impl Ui {
             renderer,
             paint_jobs: vec![],
             textures: TexturesDelta::default(),
-            state: UiState::new(gb_state, cmd_sig, emu_state_slot, asm),
+            state: UiState::new(collector, gb_state, cmd_sig, emu_state_slot, asm),
         }
     }
 
