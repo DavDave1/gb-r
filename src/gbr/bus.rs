@@ -103,6 +103,18 @@ impl Bus {
                     Instruction::decode(&instr_data)
                 }
             }
+            MappedAddress::WorkRamBank0(addr) => {
+                let local_addr = addr - WRAM_BANK0_START;
+                let len = Instruction::peek_len(self.wram[local_addr as usize])? as usize;
+                Instruction::decode(&self.wram[local_addr as usize..local_addr as usize + len])
+            }
+            MappedAddress::WorkRamActiveBank(addr) => {
+                let local_addr = addr - WRAM_ACTIVE_BANK_START;
+                let len = Instruction::peek_len(self.wram_acv_bank[local_addr as usize])? as usize;
+                Instruction::decode(
+                    &self.wram_acv_bank[local_addr as usize..local_addr as usize + len],
+                )
+            }
             _ => Err(GbError::IllegalOp(format!(
                 "fetching instruction outside ROM addr space: {:#06X}",
                 addr

@@ -1,7 +1,7 @@
 use super::{
     bus::Bus,
     cpu::CPU,
-    instruction::{ArithmeticType, GenericRegType, OperandType, SingleRegType},
+    instruction::{ArithmeticType, DoubleRegType, GenericRegType, Operand, SingleRegType},
     GbError,
 };
 
@@ -9,240 +9,419 @@ use super::{
 pub struct ALU;
 
 impl ALU {
-    pub fn exec(op: &ArithmeticType, cpu: &mut CPU, bus: &Bus) -> Result<(), GbError> {
+    pub fn exec(op: &ArithmeticType, cpu: &mut CPU, bus: &mut Bus) -> Result<(), GbError> {
+        use ArithmeticType::*;
+
         match op {
-            ArithmeticType::Add(dst, src) => {
-                let res = ALU::add(
-                    cpu,
-                    cpu.read_single_reg(dst),
-                    ALU::val_from_operand(src, cpu, bus)?,
-                );
-                cpu.write_single_reg(dst, res);
-            }
-            ArithmeticType::Sub(dst, src) => {
-                let res = ALU::sub(cpu, cpu.read_single_reg(dst), cpu.read_single_reg(src));
-                cpu.write_single_reg(dst, res);
-            }
-            ArithmeticType::Inc(dst) => match dst {
-                GenericRegType::Single(reg) => {
-                    let res = ALU::inc(cpu, cpu.read_single_reg(reg));
-                    cpu.write_single_reg(reg, res);
+            Add(dst, src) => ALU::add(cpu, bus, dst, src, false),
+            Add16(dst, src) => Ok(ALU::add16(cpu, dst, src)),
+            AddSP(offset) => {
+                let mut val = cpu.read_sp();
+                if *offset > 0 {
+                    val += *offset as u16;
+                } else {
+                    val -= offset.abs() as u16;
                 }
-                GenericRegType::Double(reg) => {
-                    cpu.write_double_reg(reg, cpu.read_double_reg(reg) + 1)
-                }
-            },
-            ArithmeticType::Dec(dst) => match dst {
-                GenericRegType::Single(reg) => {
-                    let res = ALU::dec(cpu, cpu.read_single_reg(reg));
-                    cpu.write_single_reg(reg, res);
-                }
-                GenericRegType::Double(reg) => {
-                    cpu.write_double_reg(reg, cpu.read_double_reg(reg) - 1)
-                }
-            },
-            ArithmeticType::Cmp(dst, src) => {
-                ALU::cp(
-                    cpu,
-                    cpu.read_single_reg(dst),
-                    ALU::val_from_operand(src, cpu, bus)?,
-                );
-            }
-            ArithmeticType::RlC(reg, clear_z_flag) => {
-                let res = ALU::rlc(cpu, cpu.read_single_reg(reg));
-                cpu.write_single_reg(reg, res);
 
-                if *clear_z_flag {
-                    cpu.set_zero_flag(false);
-                }
+                cpu.write_sp(val);
+                Ok(())
             }
-            ArithmeticType::Rl(reg, clear_z_flag) => {
-                let res = ALU::rl(cpu, cpu.read_single_reg(reg));
-                cpu.write_single_reg(reg, res);
-
-                if *clear_z_flag {
-                    cpu.set_zero_flag(false);
-                }
-            }
-            ArithmeticType::Sla(reg) => {
-                let res = ALU::sla(cpu, cpu.read_single_reg(reg));
-                cpu.write_single_reg(reg, res);
-            }
-            ArithmeticType::TestBit(reg, bit) => {
-                ALU::test_bit(cpu, cpu.read_single_reg(reg), *bit);
-            }
-            ArithmeticType::ResetBit(reg, bit) => ALU::reset_bit(cpu, reg, *bit),
-            ArithmeticType::And(reg, op) => {
-                let res = ALU::and(
-                    cpu,
-                    cpu.read_single_reg(reg),
-                    ALU::val_from_operand(op, cpu, bus)?,
-                );
-                cpu.write_single_reg(reg, res);
-            }
-            ArithmeticType::Or(reg, op) => {
-                let res = ALU::or(
-                    cpu,
-                    cpu.read_single_reg(reg),
-                    ALU::val_from_operand(op, cpu, bus)?,
-                );
-                cpu.write_single_reg(reg, res);
-            }
-
-            ArithmeticType::Xor(dst, src) => {
-                let res = ALU::xor(cpu, cpu.read_single_reg(dst), cpu.read_single_reg(src));
-                cpu.write_single_reg(dst, res);
-            }
+            Adc(dst, src) => ALU::add(cpu, bus, dst, src, true),
+            Sub(dst, src) => ALU::sub(cpu, bus, dst, src, false),
+            Sbc(dst, src) => ALU::sub(cpu, bus, dst, src, true),
+            Inc(dst) => Ok(ALU::inc(cpu, dst)),
+            IncAddr(src) => ALU::inc_addr(cpu, bus, src),
+            DecAddr(src) => ALU::dec_addr(cpu, bus, src),
+            Dec(dst) => Ok(ALU::dec(cpu, dst)),
+            Cmp(dst, src) => ALU::cp(cpu, bus, dst, src),
+            Rlc(reg, clear_z_flag) => ALU::rlc(cpu, bus, reg, *clear_z_flag),
+            Rl(reg, clear_z_flag) => ALU::rl(cpu, bus, reg, *clear_z_flag),
+            Rrc(reg, clear_z_flag) => ALU::rrc(cpu, bus, reg, *clear_z_flag),
+            Rr(reg, clear_z_flag) => ALU::rr(cpu, bus, reg, *clear_z_flag),
+            Sla(reg) => ALU::sla(cpu, bus, reg),
+            Sra(reg) => ALU::sra(cpu, bus, reg),
+            Srl(reg) => ALU::srl(cpu, bus, reg),
+            TestBit(src, bit) => ALU::test_bit(cpu, bus, src, *bit),
+            ResetBit(src, bit) => ALU::reset_bit(cpu, bus, src, *bit),
+            SetBit(src, bit) => ALU::set_bit(cpu, bus, src, *bit),
+            And(dst, src) => ALU::and(cpu, bus, dst, src),
+            Or(dst, src) => ALU::or(cpu, bus, dst, src),
+            Xor(dst, src) => ALU::xor(cpu, bus, dst, src),
+            Cpl(reg) => Ok(ALU::cpl(cpu, reg)),
+            Swap(reg) => ALU::swap(cpu, bus, reg),
         }
-
-        Ok(())
     }
 
-    fn val_from_operand(operand_type: &OperandType, cpu: &CPU, bus: &Bus) -> Result<u8, GbError> {
+    fn val_from_operand(operand_type: &Operand, cpu: &CPU, bus: &Bus) -> Result<u8, GbError> {
         let cmp_val = match operand_type {
-            OperandType::Imm(v) => *v,
-            OperandType::Reg(src) => cpu.read_single_reg(src),
-            OperandType::RegAddr(src) => bus.read_byte(cpu.read_double_reg(src))?,
+            Operand::Imm(v) => *v,
+            Operand::Reg(src) => cpu.read_single_reg(src),
+            Operand::RegAddr(src) => bus.read_byte(cpu.read_double_reg(src))?,
         };
 
         Ok(cmp_val)
     }
 
-    pub fn dec(cpu: &mut CPU, value: u8) -> u8 {
+    fn dec8(cpu: &mut CPU, value: u8) -> u8 {
         let result = value.wrapping_sub(1);
 
-        cpu.set_bcd_h_flag(ALU::check_h_carry_sub(value as i16, -1));
-        cpu.set_bcd_n_flag(true);
-        cpu.set_zero_flag(result == 0);
+        cpu.set_flags(
+            result == 0,
+            true,
+            ALU::check_h_carry_sub(value as i16, -1),
+            cpu.get_carry_flag(),
+        );
 
         result
     }
 
-    pub fn inc(cpu: &mut CPU, value: u8) -> u8 {
+    fn dec(cpu: &mut CPU, reg: &GenericRegType) {
+        match reg {
+            GenericRegType::Single(reg) => {
+                let value = cpu.read_single_reg(reg);
+                let result = ALU::dec8(cpu, value);
+
+                cpu.write_single_reg(reg, result);
+            }
+            GenericRegType::Double(reg) => cpu.write_double_reg(reg, cpu.read_double_reg(reg) - 1),
+        }
+    }
+
+    fn dec_addr(cpu: &mut CPU, bus: &mut Bus, reg: &DoubleRegType) -> Result<(), GbError> {
+        let addr = cpu.read_double_reg(reg);
+        let val = bus.read_byte(addr)?;
+
+        let result = ALU::dec8(cpu, val);
+
+        bus.write_byte(addr, result)
+    }
+
+    fn inc8(cpu: &mut CPU, value: u8) -> u8 {
         let result = value.wrapping_add(1);
 
-        cpu.set_bcd_h_flag(ALU::check_h_carry_sum(value, 1));
-        cpu.set_bcd_n_flag(false);
-        cpu.set_zero_flag(result == 0);
+        cpu.set_flags(
+            result == 0,
+            false,
+            ALU::check_h_carry_sum(value as u16, 1),
+            cpu.get_carry_flag(),
+        );
 
         result
     }
 
-    pub fn add(cpu: &mut CPU, left: u8, right: u8) -> u8 {
-        let result_ext = left as u16 + right as u16;
+    fn inc(cpu: &mut CPU, reg: &GenericRegType) {
+        match reg {
+            GenericRegType::Single(reg) => {
+                let value = cpu.read_single_reg(reg);
+
+                let result = ALU::inc8(cpu, value);
+
+                cpu.write_single_reg(reg, result);
+            }
+            GenericRegType::Double(reg) => cpu.write_double_reg(reg, cpu.read_double_reg(reg) + 1),
+        }
+    }
+
+    fn inc_addr(cpu: &mut CPU, bus: &mut Bus, reg: &DoubleRegType) -> Result<(), GbError> {
+        let addr = cpu.read_double_reg(reg);
+        let val = bus.read_byte(addr)?;
+
+        let result = ALU::inc8(cpu, val);
+
+        bus.write_byte(addr, result)
+    }
+
+    fn add(
+        cpu: &mut CPU,
+        bus: &Bus,
+        dst: &SingleRegType,
+        src: &Operand,
+        with_carry: bool,
+    ) -> Result<(), GbError> {
+        let left = cpu.read_single_reg(dst) as u16;
+        let mut right = ALU::val_from_operand(src, cpu, bus)? as u16;
+
+        if with_carry {
+            right += cpu.get_carry_flag() as u16;
+        }
+
+        let result_ext = left + right;
         let result = result_ext as u8;
 
-        cpu.set_bcd_h_flag(ALU::check_h_carry_sum(left, right));
-        cpu.set_bcd_n_flag(false);
-        cpu.set_carry_flag(result_ext & 0xFF00 != 0);
-        cpu.set_zero_flag(result == 0);
+        cpu.set_flags(
+            result == 0,
+            false,
+            ALU::check_h_carry_sum(left, right),
+            result_ext & 0xFF00 != 0,
+        );
 
-        result
+        cpu.write_single_reg(dst, result);
+        Ok(())
     }
 
-    pub fn sub(cpu: &mut CPU, left: u8, right: u8) -> u8 {
+    fn add16(cpu: &mut CPU, dst: &DoubleRegType, src: &DoubleRegType) {
+        let left = cpu.read_double_reg(dst) as u32;
+        let right = cpu.read_double_reg(src) as u32;
+
+        let result_ext = left + right;
+        let result = result_ext as u16;
+
+        cpu.set_flags(
+            cpu.get_zero_flag(),
+            false,
+            ALU::check_h_carry_sum16(left, right),
+            result_ext & 0xFFFF0000 != 0,
+        );
+
+        cpu.write_double_reg(dst, result);
+    }
+
+    fn sub(
+        cpu: &mut CPU,
+        bus: &Bus,
+        dst: &SingleRegType,
+        src: &Operand,
+        with_carry: bool,
+    ) -> Result<(), GbError> {
+        let left = cpu.read_single_reg(dst);
+        let mut right = ALU::val_from_operand(src, cpu, bus)?;
+
+        if with_carry {
+            right += cpu.get_carry_flag() as u8;
+        }
+
         let result = left.wrapping_sub(right);
 
-        cpu.set_bcd_h_flag(ALU::check_h_carry_sub(left as i16, right as i16));
+        cpu.set_flags(
+            result == 0,
+            true,
+            ALU::check_h_carry_sub(left as i16, right as i16),
+            (left as i16 - right as i16) < 0,
+        );
+
+        cpu.write_single_reg(dst, result);
+        Ok(())
+    }
+
+    fn and(cpu: &mut CPU, bus: &Bus, left: &SingleRegType, right: &Operand) -> Result<(), GbError> {
+        let result = cpu.read_single_reg(left) & ALU::val_from_operand(right, cpu, bus)?;
+
+        cpu.set_flags(result == 0, false, true, false);
+
+        cpu.write_single_reg(left, result);
+
+        Ok(())
+    }
+
+    fn or(cpu: &mut CPU, bus: &Bus, left: &SingleRegType, right: &Operand) -> Result<(), GbError> {
+        let result = cpu.read_single_reg(left) | ALU::val_from_operand(right, cpu, bus)?;
+
+        cpu.set_flags(result == 0, false, false, false);
+
+        cpu.write_single_reg(left, result);
+
+        Ok(())
+    }
+
+    fn xor(cpu: &mut CPU, bus: &Bus, left: &SingleRegType, right: &Operand) -> Result<(), GbError> {
+        let result = cpu.read_single_reg(left) ^ ALU::val_from_operand(right, cpu, bus)?;
+
+        cpu.set_flags(result == 0, false, false, false);
+
+        cpu.write_single_reg(left, result);
+
+        Ok(())
+    }
+
+    fn swap(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
+        let high = value & 0b11110000;
+
+        let result = value << 4 | high >> 4;
+
+        cpu.set_zero_flag(result == 0);
+
+        cpu.write_to_reg_or_addr(bus, src, result)
+    }
+
+    fn cpl(cpu: &mut CPU, reg: &SingleRegType) {
         cpu.set_bcd_n_flag(true);
-        cpu.set_carry_flag((left as i16 - right as i16) < 0);
-        cpu.set_zero_flag(result == 0);
-
-        result
-    }
-
-    fn and(cpu: &mut CPU, left: u8, right: u8) -> u8 {
-        let result = left & right;
-
-        cpu.set_zero_flag(result == 0);
-        cpu.set_bcd_n_flag(false);
         cpu.set_bcd_h_flag(true);
-        cpu.set_carry_flag(false);
-        result
+
+        cpu.write_single_reg(reg, !cpu.read_single_reg(reg));
     }
 
-    fn or(cpu: &mut CPU, left: u8, right: u8) -> u8 {
-        let result = left | right;
+    fn rlc(
+        cpu: &mut CPU,
+        bus: &mut Bus,
+        src: &GenericRegType,
+        clear_z_flag: bool,
+    ) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
 
-        cpu.set_zero_flag(result == 0);
-        cpu.set_bcd_n_flag(false);
-        cpu.set_bcd_h_flag(false);
-        cpu.set_carry_flag(false);
-        result
-    }
-
-    pub fn xor(cpu: &mut CPU, left: u8, right: u8) -> u8 {
-        let result = left ^ right;
-
-        cpu.set_bcd_h_flag(false);
-        cpu.set_bcd_n_flag(false);
-        cpu.set_carry_flag(false);
-        cpu.set_zero_flag(result == 0);
-        result
-    }
-
-    pub fn rlc(cpu: &mut CPU, value: u8) -> u8 {
         let carry_out = (value & 0b10000000) != 0;
 
         let result = value.rotate_left(1);
 
-        cpu.set_bcd_h_flag(false);
-        cpu.set_bcd_n_flag(false);
-        cpu.set_carry_flag(carry_out);
-        cpu.set_zero_flag(result == 0);
+        let z_flag = if clear_z_flag { false } else { result == 0 };
 
-        result
+        cpu.set_flags(z_flag, false, false, carry_out);
+
+        cpu.write_to_reg_or_addr(bus, src, result)
     }
 
-    pub fn rl(cpu: &mut CPU, value: u8) -> u8 {
-        let will_carry = value & 0b10000000 != 0;
+    fn rl(
+        cpu: &mut CPU,
+        bus: &mut Bus,
+        src: &GenericRegType,
+        clear_z_flag: bool,
+    ) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
+        let carry_out = (value & 0b10000000) != 0;
 
         let mut result = value.wrapping_shl(1);
 
         result = result | cpu.get_carry_flag() as u8;
 
-        cpu.set_bcd_h_flag(false);
-        cpu.set_bcd_n_flag(false);
-        cpu.set_carry_flag(will_carry);
-        cpu.set_zero_flag(false);
+        let z_flag = if clear_z_flag { false } else { result == 0 };
 
-        result
+        cpu.set_flags(z_flag, false, false, carry_out);
+
+        cpu.write_to_reg_or_addr(bus, src, result)
     }
 
-    pub fn sla(cpu: &mut CPU, value: u8) -> u8 {
+    fn rrc(
+        cpu: &mut CPU,
+        bus: &mut Bus,
+        src: &GenericRegType,
+        clear_z_flag: bool,
+    ) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
+        let carry_out = (value & 0b00000001) != 0;
+
+        let result = value.rotate_right(1);
+
+        let z_flag = if clear_z_flag { false } else { result == 0 };
+
+        cpu.set_flags(z_flag, false, false, carry_out);
+
+        cpu.write_to_reg_or_addr(bus, src, result)
+    }
+
+    fn rr(
+        cpu: &mut CPU,
+        bus: &mut Bus,
+        src: &GenericRegType,
+        clear_z_flag: bool,
+    ) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
+        let carry_out = (value & 0b00000001) != 0;
+
+        let mut result = value.wrapping_shr(1);
+
+        result = result | cpu.get_carry_flag() as u8;
+
+        let z_flag = if clear_z_flag { false } else { result == 0 };
+
+        cpu.set_flags(z_flag, false, false, carry_out);
+
+        cpu.write_to_reg_or_addr(bus, src, result)
+    }
+
+    fn sla(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
         let will_carry = value & 0b10000000 != 0;
 
         let result = value.wrapping_shl(1);
 
-        cpu.set_bcd_h_flag(false);
-        cpu.set_bcd_n_flag(false);
-        cpu.set_carry_flag(will_carry);
-        cpu.set_zero_flag(result == 0);
+        cpu.set_flags(result == 0, false, false, will_carry);
 
-        result
+        cpu.write_to_reg_or_addr(bus, src, result)
     }
 
-    pub fn test_bit(cpu: &mut CPU, value: u8, bit: u8) {
+    fn srl(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
+        let will_carry = value & 0b00000001 != 0;
+
+        let result = value.wrapping_shr(1);
+
+        cpu.set_flags(result == 0, false, false, will_carry);
+
+        cpu.write_to_reg_or_addr(bus, src, result)
+    }
+
+    fn sra(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
+        let will_carry = value & 0b00000001 != 0;
+
+        // shift right and keep but 7 or reg unchanged
+        let result = value.wrapping_shr(1) | value & 0b10000000;
+
+        cpu.set_flags(result == 0, false, false, will_carry);
+
+        cpu.write_to_reg_or_addr(bus, src, result)
+    }
+
+    fn test_bit(cpu: &mut CPU, bus: &Bus, src: &GenericRegType, bit: u8) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
         let mask = 0b1_u8 << bit;
 
-        cpu.set_bcd_h_flag(true);
-        cpu.set_bcd_n_flag(false);
-        cpu.set_zero_flag(value & mask == 0);
+        cpu.set_flags(value & mask == 0, false, true, cpu.get_carry_flag());
+
+        Ok(())
     }
 
-    fn reset_bit(cpu: &mut CPU, reg: &SingleRegType, bit: u8) {
+    fn reset_bit(
+        cpu: &mut CPU,
+        bus: &mut Bus,
+        src: &GenericRegType,
+        bit: u8,
+    ) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
         let mask = !(0b1 << bit);
 
-        let val = cpu.read_single_reg(reg);
-        cpu.write_single_reg(reg, val & mask);
+        cpu.write_to_reg_or_addr(bus, src, value & mask)
     }
 
-    pub fn cp(cpu: &mut CPU, left: u8, right: u8) {
-        ALU::sub(cpu, left, right);
+    fn set_bit(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType, bit: u8) -> Result<(), GbError> {
+        let value = cpu.read_from_reg_or_addr(bus, src)?;
+
+        let mask = 0b1 << bit;
+
+        cpu.write_to_reg_or_addr(bus, src, value | mask)
     }
 
-    fn check_h_carry_sum(lv: u8, rv: u8) -> bool {
+    fn cp(cpu: &mut CPU, bus: &Bus, dst: &SingleRegType, src: &Operand) -> Result<(), GbError> {
+        let left = cpu.read_single_reg(dst);
+        let right = ALU::val_from_operand(src, cpu, bus)?;
+
+        let result = left.wrapping_sub(right);
+
+        cpu.set_flags(
+            result == 0,
+            true,
+            ALU::check_h_carry_sub(left as i16, right as i16),
+            (left as i16 - right as i16) < 0,
+        );
+
+        Ok(())
+    }
+
+    fn check_h_carry_sum(lv: u16, rv: u16) -> bool {
         ((lv & 0xFF) + (rv & 0xFF)) > 0xF
+    }
+
+    fn check_h_carry_sum16(lv: u32, rv: u32) -> bool {
+        ((lv & 0xFFFF) + (rv & 0xFFFF)) > 0xFF
     }
 
     fn check_h_carry_sub(lv: i16, rv: i16) -> bool {

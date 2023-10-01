@@ -5,8 +5,8 @@ use crate::gbr::bus::Bus;
 use crate::gbr::GbError;
 
 use super::instruction::{
-    CallMode, DestType, DoubleRegType, GenericRegType, InstructionType, JumpCondition, JumpType,
-    PostLoad, PostStore, SingleRegType, SourceType,
+    Dest, DoubleRegType, GenericRegType, InstructionType, JumpCondition, JumpType, PostLoad,
+    SingleRegType, Source,
 };
 
 #[derive(Default, Clone)]
@@ -137,6 +137,7 @@ impl CPU {
 
     pub fn read_double_reg(&self, reg: &DoubleRegType) -> u16 {
         match reg {
+            DoubleRegType::AF => self.read_af(),
             DoubleRegType::BC => self.read_bc(),
             DoubleRegType::DE => self.read_de(),
             DoubleRegType::HL => self.read_hl(),
@@ -146,6 +147,7 @@ impl CPU {
 
     pub fn write_double_reg(&mut self, reg: &DoubleRegType, value: u16) {
         match reg {
+            DoubleRegType::AF => self.write_af(value),
             DoubleRegType::BC => self.write_bc(value),
             DoubleRegType::DE => self.write_de(value),
             DoubleRegType::HL => self.write_hl(value),
@@ -159,6 +161,35 @@ impl CPU {
 
     pub fn read_sp(&self) -> u16 {
         self.reg_sp
+    }
+
+    pub fn write_sp(&mut self, value: u16) {
+        self.reg_sp = value;
+    }
+
+    pub fn read_from_reg_or_addr(&self, bus: &Bus, src: &GenericRegType) -> Result<u8, GbError> {
+        let val = match src {
+            GenericRegType::Single(reg) => self.read_single_reg(reg),
+            GenericRegType::Double(reg_addr) => bus.read_byte(self.read_double_reg(reg_addr))?,
+        };
+
+        Ok(val)
+    }
+
+    pub fn write_to_reg_or_addr(
+        &mut self,
+        bus: &mut Bus,
+        src: &GenericRegType,
+        value: u8,
+    ) -> Result<(), GbError> {
+        match src {
+            GenericRegType::Single(reg) => self.write_single_reg(reg, value),
+            GenericRegType::Double(reg_addr) => {
+                bus.write_byte(self.read_double_reg(reg_addr), value)?
+            }
+        }
+
+        Ok(())
     }
 
     pub fn get_zero_flag(&self) -> bool {
@@ -209,6 +240,13 @@ impl CPU {
         }
     }
 
+    pub fn set_flags(&mut self, z: bool, n: bool, h: bool, c: bool) {
+        self.set_zero_flag(z);
+        self.set_bcd_n_flag(n);
+        self.set_bcd_h_flag(h);
+        self.set_carry_flag(c);
+    }
+
     fn push_stack(&mut self, bus: &mut Bus, value: u16) -> Result<(), GbError> {
         bus.write_byte(self.reg_sp - 1, (value >> 8) as u8)?;
         bus.write_byte(self.reg_sp - 2, value as u8)?;
@@ -234,15 +272,16 @@ impl CPU {
 
     fn jump(&mut self, condition: &JumpCondition, jump_type: &JumpType) -> bool {
         if self.test_condition(condition) {
-            match *jump_type {
-                JumpType::Relative(offset) => {
-                    if offset < 0 {
+            match jump_type {
+                JumpType::Offset(offset) => {
+                    if *offset < 0 {
                         self.reg_pc -= offset.abs() as u16;
                     } else {
-                        self.reg_pc += offset as u16;
+                        self.reg_pc += *offset as u16;
                     }
                 }
-                JumpType::Absolute(addr) => self.reg_pc = addr,
+                JumpType::Addr(addr) => self.reg_pc = *addr,
+                JumpType::RegAddr(reg) => self.reg_pc = self.read_double_reg(reg),
             }
 
             return true;
@@ -251,29 +290,50 @@ impl CPU {
         false
     }
 
-    fn load(
-        &mut self,
-        bus: &Bus,
-        reg: &GenericRegType,
-        source: &SourceType,
-        post_load: &PostLoad,
-    ) -> Result<(), GbError> {
+    fn call(&mut self, bus: &mut Bus, addr: u16, cond: &JumpCondition) -> Result<bool, GbError> {
+        if self.test_condition(cond) {
+            self.push_stack(bus, self.reg_pc)?;
+            self.reg_pc = addr;
+
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    fn ret(&mut self, bus: &mut Bus, cond: &JumpCondition) -> Result<bool, GbError> {
+        if self.test_condition(cond) {
+            self.reg_pc = self.pop_stack(bus)?;
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    fn load(&mut self, bus: &Bus, reg: &GenericRegType, source: &Source) -> Result<(), GbError> {
         match reg {
             GenericRegType::Double(reg) => match source {
-                SourceType::Imm16(val) => self.write_double_reg(reg, *val),
+                Source::Imm16(val) => self.write_double_reg(reg, *val),
+                Source::SpWithOffset(offset) => {
+                    if *offset < 0 {
+                        self.write_double_reg(reg, self.reg_sp - *offset as u16);
+                    } else {
+                        self.write_double_reg(reg, self.reg_sp + *offset as u16);
+                    }
+                }
                 _ => return Err(GbError::IllegalOp("load u8 into double register".into())),
             },
             GenericRegType::Single(reg) => {
                 let val = match source {
-                    SourceType::Addr(addr) => bus.read_byte(*addr)?,
-                    SourceType::Imm8(imm) => *imm,
-                    SourceType::Imm16(_) => {
+                    Source::Addr(addr) => bus.read_byte(*addr)?,
+                    Source::Imm8(imm) => *imm,
+                    Source::Imm16(_) | Source::SpWithOffset(_) => {
                         return Err(GbError::IllegalOp("load imm16 into 8bit register".into()))
                     }
-                    SourceType::RegImm(src_reg) => self.read_single_reg(src_reg),
-                    SourceType::RegAddr(src_reg) => bus.read_byte(self.read_double_reg(src_reg))?,
-                    SourceType::IoPortImm(imm) => bus.read_byte(0xFF00 + *imm as u16)?,
-                    SourceType::IoPortReg(src_reg) => {
+                    Source::RegImm(src_reg) => self.read_single_reg(src_reg),
+                    Source::RegAddr(src_reg) => bus.read_byte(self.read_double_reg(src_reg))?,
+                    Source::IoPortImm(imm) => bus.read_byte(0xFF00 + *imm as u16)?,
+                    Source::IoPortReg(src_reg) => {
                         bus.read_byte(0xFF00 + self.read_single_reg(src_reg) as u16)?
                     }
                 };
@@ -282,61 +342,39 @@ impl CPU {
             }
         }
 
-        match post_load {
-            PostStore::Inc => self.write_hl(self.read_hl() + 1),
-            PostStore::Dec => self.write_hl(self.read_hl() - 1),
-            PostStore::None => (),
-        }
         Ok(())
     }
 
-    fn store(
-        &mut self,
-        bus: &mut Bus,
-        dest: &DestType,
-        src: &SourceType,
-        post_store: &PostStore,
-    ) -> Result<(), GbError> {
+    fn store(&mut self, bus: &mut Bus, dest: &Dest, src: &Source) -> Result<(), GbError> {
         let addr = match dest {
-            DestType::Addr(addr) => *addr,
-            DestType::RegAddr(reg_addr) => self.read_double_reg(reg_addr),
-            DestType::IoPort(offset) => 0xFF00 + *offset as u16,
-            DestType::IoPortReg(reg_offset) => 0xFF00 + self.read_single_reg(reg_offset) as u16,
+            Dest::Addr(addr) => *addr,
+            Dest::RegAddr(reg_addr) => self.read_double_reg(reg_addr),
+            Dest::IoPort(offset) => 0xFF00 + *offset as u16,
+            Dest::IoPortReg(reg_offset) => 0xFF00 + self.read_single_reg(reg_offset) as u16,
         };
 
         let val = match src {
-            SourceType::Imm8(v) => *v,
-            SourceType::Imm16(_) => {
+            Source::Imm8(v) => *v,
+            Source::Imm16(_) | Source::SpWithOffset(_) => {
                 return Err(GbError::IllegalOp("store from imm16 source".into()))
             }
-            SourceType::RegImm(reg) => self.read_single_reg(reg),
-            SourceType::RegAddr(reg) => bus.read_byte(self.read_double_reg(reg))?,
-            SourceType::Addr(addr) => bus.read_byte(*addr)?,
-            SourceType::IoPortReg(reg) => {
-                bus.read_byte(0xFF00 + self.read_single_reg(reg) as u16)?
-            }
-            SourceType::IoPortImm(offs) => bus.read_byte(0xFF00 + *offs as u16)?,
+            Source::RegImm(reg) => self.read_single_reg(reg),
+            Source::RegAddr(reg) => bus.read_byte(self.read_double_reg(reg))?,
+            Source::Addr(addr) => bus.read_byte(*addr)?,
+            Source::IoPortReg(reg) => bus.read_byte(0xFF00 + self.read_single_reg(reg) as u16)?,
+            Source::IoPortImm(offs) => bus.read_byte(0xFF00 + *offs as u16)?,
         };
 
         bus.write_byte(addr, val)?;
 
-        match post_store {
-            PostStore::Inc => self.write_hl(self.read_hl() + 1),
-            PostStore::Dec => self.write_hl(self.read_hl() - 1),
-            PostStore::None => (),
-        }
-
         Ok(())
     }
 
-    fn call(&mut self, bus: &mut Bus, call_mode: &CallMode) -> Result<(), GbError> {
-        self.push_stack(bus, self.reg_pc)?;
-
-        match call_mode {
-            CallMode::Absolute(addr) => self.reg_pc = *addr,
+    fn post_op(&mut self, post_op: &PostLoad) {
+        match post_op {
+            PostLoad::Inc => self.write_hl(self.read_hl() + 1),
+            PostLoad::Dec => self.write_hl(self.read_hl() - 1),
         }
-
-        Ok(())
     }
 
     pub fn step(&mut self, bus: &mut Bus) -> Result<u8, GbError> {
@@ -349,16 +387,29 @@ impl CPU {
         match instr.instr_type() {
             InstructionType::Nop => (),
             InstructionType::Stop => self.low_power_mode = true,
+            InstructionType::Halt => return Err(GbError::Unimplemented("Halt instruction".into())),
+            InstructionType::DaA => return Err(GbError::Unimplemented("DaA instruction".into())),
+            InstructionType::FlipCarry => self.set_carry_flag(!self.get_carry_flag()),
+            InstructionType::ClearCarry => self.set_carry_flag(false),
             InstructionType::MasterInterrupt(enable) => bus.ir_handler_mut().set_ime(*enable),
             InstructionType::Arithmetic(ar_type) => ALU::exec(ar_type, self, bus)?,
             InstructionType::Jump(condition, jump_type) => {
                 jumped = self.jump(condition, jump_type);
             }
-            InstructionType::Load(reg, source, post_load) => {
-                self.load(bus, reg, source, post_load)?
+            InstructionType::Load(reg, source) => self.load(bus, reg, source)?,
+            InstructionType::LoadWithOp(reg, source, post_load) => {
+                self.load(bus, reg, source)?;
+                self.post_op(post_load);
             }
-            InstructionType::Store(dest, src, post_store) => {
-                self.store(bus, dest, src, post_store)?
+            InstructionType::LoadSP(reg) => self.reg_sp = self.read_double_reg(reg),
+            InstructionType::Store(dest, src) => self.store(bus, dest, src)?,
+            InstructionType::StoreWithOp(dest, src, post_store) => {
+                self.store(bus, dest, src)?;
+                self.post_op(post_store);
+            }
+            InstructionType::StoreSP(addr) => {
+                bus.write_byte(*addr, self.reg_sp as u8)?;
+                bus.write_byte(*addr + 1, (self.reg_sp >> 8) as u8)?;
             }
             InstructionType::Push(reg_type) => {
                 self.push_stack(bus, self.read_double_reg(reg_type))?
@@ -367,8 +418,9 @@ impl CPU {
                 let value = self.pop_stack(bus)?;
                 self.write_double_reg(reg, value);
             }
-            InstructionType::Call(call_mode) => self.call(bus, call_mode)?,
-            InstructionType::Ret => self.reg_pc = self.pop_stack(bus)?,
+            InstructionType::Call(addr, cond) => jumped = self.call(bus, *addr, cond)?,
+            InstructionType::Ret(cond) => jumped = self.ret(bus, cond)?,
+            InstructionType::RetI => return Err(GbError::Unimplemented("Return interrupt".into())),
         }
 
         Ok(instr.cycles(jumped))
