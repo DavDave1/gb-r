@@ -8,6 +8,10 @@ use super::{
     timer::Timer, GbError,
 };
 
+#[cfg(test)]
+use mockall::automock;
+
+#[cfg_attr(test, automock)]
 pub trait BusAccess {
     fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError>;
     fn read_byte(&self, addr: u16) -> Result<u8, GbError>;

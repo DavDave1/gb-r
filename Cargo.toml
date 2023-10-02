@@ -30,3 +30,6 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 ] }
 winit = "0.28"
 winit_input_helper = "0.14"
+
+[dev-dependencies]
+mockall = "0.11"
