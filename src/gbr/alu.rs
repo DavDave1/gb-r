@@ -1,5 +1,5 @@
 use super::{
-    bus::Bus,
+    bus::BusAccess,
     cpu::CPU,
     instruction::{ArithmeticType, DoubleRegType, GenericRegType, Operand, SingleRegType},
     GbError,
@@ -9,7 +9,11 @@ use super::{
 pub struct ALU;
 
 impl ALU {
-    pub fn exec(op: &ArithmeticType, cpu: &mut CPU, bus: &mut Bus) -> Result<(), GbError> {
+    pub fn exec(
+        op: &ArithmeticType,
+        cpu: &mut CPU,
+        bus: &mut dyn BusAccess,
+    ) -> Result<(), GbError> {
         use ArithmeticType::*;
 
         match op {
@@ -52,7 +56,11 @@ impl ALU {
         }
     }
 
-    fn val_from_operand(operand_type: &Operand, cpu: &CPU, bus: &Bus) -> Result<u8, GbError> {
+    fn val_from_operand(
+        operand_type: &Operand,
+        cpu: &CPU,
+        bus: &dyn BusAccess,
+    ) -> Result<u8, GbError> {
         let cmp_val = match operand_type {
             Operand::Imm(v) => *v,
             Operand::Reg(src) => cpu.read_single_reg(src),
@@ -87,7 +95,11 @@ impl ALU {
         }
     }
 
-    fn dec_addr(cpu: &mut CPU, bus: &mut Bus, reg: &DoubleRegType) -> Result<(), GbError> {
+    fn dec_addr(
+        cpu: &mut CPU,
+        bus: &mut dyn BusAccess,
+        reg: &DoubleRegType,
+    ) -> Result<(), GbError> {
         let addr = cpu.read_double_reg(reg);
         let val = bus.read_byte(addr)?;
 
@@ -122,7 +134,11 @@ impl ALU {
         }
     }
 
-    fn inc_addr(cpu: &mut CPU, bus: &mut Bus, reg: &DoubleRegType) -> Result<(), GbError> {
+    fn inc_addr(
+        cpu: &mut CPU,
+        bus: &mut dyn BusAccess,
+        reg: &DoubleRegType,
+    ) -> Result<(), GbError> {
         let addr = cpu.read_double_reg(reg);
         let val = bus.read_byte(addr)?;
 
@@ -133,7 +149,7 @@ impl ALU {
 
     fn add(
         cpu: &mut CPU,
-        bus: &Bus,
+        bus: &dyn BusAccess,
         dst: &SingleRegType,
         src: &Operand,
         with_carry: bool,
@@ -178,7 +194,7 @@ impl ALU {
 
     fn sub(
         cpu: &mut CPU,
-        bus: &Bus,
+        bus: &dyn BusAccess,
         dst: &SingleRegType,
         src: &Operand,
         with_carry: bool,
@@ -203,7 +219,12 @@ impl ALU {
         Ok(())
     }
 
-    fn and(cpu: &mut CPU, bus: &Bus, left: &SingleRegType, right: &Operand) -> Result<(), GbError> {
+    fn and(
+        cpu: &mut CPU,
+        bus: &dyn BusAccess,
+        left: &SingleRegType,
+        right: &Operand,
+    ) -> Result<(), GbError> {
         let result = cpu.read_single_reg(left) & ALU::val_from_operand(right, cpu, bus)?;
 
         cpu.set_flags(result == 0, false, true, false);
@@ -213,7 +234,12 @@ impl ALU {
         Ok(())
     }
 
-    fn or(cpu: &mut CPU, bus: &Bus, left: &SingleRegType, right: &Operand) -> Result<(), GbError> {
+    fn or(
+        cpu: &mut CPU,
+        bus: &dyn BusAccess,
+        left: &SingleRegType,
+        right: &Operand,
+    ) -> Result<(), GbError> {
         let result = cpu.read_single_reg(left) | ALU::val_from_operand(right, cpu, bus)?;
 
         cpu.set_flags(result == 0, false, false, false);
@@ -223,7 +249,12 @@ impl ALU {
         Ok(())
     }
 
-    fn xor(cpu: &mut CPU, bus: &Bus, left: &SingleRegType, right: &Operand) -> Result<(), GbError> {
+    fn xor(
+        cpu: &mut CPU,
+        bus: &dyn BusAccess,
+        left: &SingleRegType,
+        right: &Operand,
+    ) -> Result<(), GbError> {
         let result = cpu.read_single_reg(left) ^ ALU::val_from_operand(right, cpu, bus)?;
 
         cpu.set_flags(result == 0, false, false, false);
@@ -233,7 +264,7 @@ impl ALU {
         Ok(())
     }
 
-    fn swap(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType) -> Result<(), GbError> {
+    fn swap(cpu: &mut CPU, bus: &mut dyn BusAccess, src: &GenericRegType) -> Result<(), GbError> {
         let value = cpu.read_from_reg_or_addr(bus, src)?;
 
         let high = value & 0b11110000;
@@ -254,7 +285,7 @@ impl ALU {
 
     fn rlc(
         cpu: &mut CPU,
-        bus: &mut Bus,
+        bus: &mut dyn BusAccess,
         src: &GenericRegType,
         clear_z_flag: bool,
     ) -> Result<(), GbError> {
@@ -273,7 +304,7 @@ impl ALU {
 
     fn rl(
         cpu: &mut CPU,
-        bus: &mut Bus,
+        bus: &mut dyn BusAccess,
         src: &GenericRegType,
         clear_z_flag: bool,
     ) -> Result<(), GbError> {
@@ -294,7 +325,7 @@ impl ALU {
 
     fn rrc(
         cpu: &mut CPU,
-        bus: &mut Bus,
+        bus: &mut dyn BusAccess,
         src: &GenericRegType,
         clear_z_flag: bool,
     ) -> Result<(), GbError> {
@@ -313,7 +344,7 @@ impl ALU {
 
     fn rr(
         cpu: &mut CPU,
-        bus: &mut Bus,
+        bus: &mut dyn BusAccess,
         src: &GenericRegType,
         clear_z_flag: bool,
     ) -> Result<(), GbError> {
@@ -332,7 +363,7 @@ impl ALU {
         cpu.write_to_reg_or_addr(bus, src, result)
     }
 
-    fn sla(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType) -> Result<(), GbError> {
+    fn sla(cpu: &mut CPU, bus: &mut dyn BusAccess, src: &GenericRegType) -> Result<(), GbError> {
         let value = cpu.read_from_reg_or_addr(bus, src)?;
 
         let will_carry = value & 0b10000000 != 0;
@@ -344,7 +375,7 @@ impl ALU {
         cpu.write_to_reg_or_addr(bus, src, result)
     }
 
-    fn srl(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType) -> Result<(), GbError> {
+    fn srl(cpu: &mut CPU, bus: &mut dyn BusAccess, src: &GenericRegType) -> Result<(), GbError> {
         let value = cpu.read_from_reg_or_addr(bus, src)?;
 
         let will_carry = value & 0b00000001 != 0;
@@ -356,7 +387,7 @@ impl ALU {
         cpu.write_to_reg_or_addr(bus, src, result)
     }
 
-    fn sra(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType) -> Result<(), GbError> {
+    fn sra(cpu: &mut CPU, bus: &mut dyn BusAccess, src: &GenericRegType) -> Result<(), GbError> {
         let value = cpu.read_from_reg_or_addr(bus, src)?;
 
         let will_carry = value & 0b00000001 != 0;
@@ -369,7 +400,12 @@ impl ALU {
         cpu.write_to_reg_or_addr(bus, src, result)
     }
 
-    fn test_bit(cpu: &mut CPU, bus: &Bus, src: &GenericRegType, bit: u8) -> Result<(), GbError> {
+    fn test_bit(
+        cpu: &mut CPU,
+        bus: &dyn BusAccess,
+        src: &GenericRegType,
+        bit: u8,
+    ) -> Result<(), GbError> {
         let value = cpu.read_from_reg_or_addr(bus, src)?;
 
         let mask = 0b1_u8 << bit;
@@ -381,7 +417,7 @@ impl ALU {
 
     fn reset_bit(
         cpu: &mut CPU,
-        bus: &mut Bus,
+        bus: &mut dyn BusAccess,
         src: &GenericRegType,
         bit: u8,
     ) -> Result<(), GbError> {
@@ -392,7 +428,12 @@ impl ALU {
         cpu.write_to_reg_or_addr(bus, src, value & mask)
     }
 
-    fn set_bit(cpu: &mut CPU, bus: &mut Bus, src: &GenericRegType, bit: u8) -> Result<(), GbError> {
+    fn set_bit(
+        cpu: &mut CPU,
+        bus: &mut dyn BusAccess,
+        src: &GenericRegType,
+        bit: u8,
+    ) -> Result<(), GbError> {
         let value = cpu.read_from_reg_or_addr(bus, src)?;
 
         let mask = 0b1 << bit;
@@ -400,7 +441,12 @@ impl ALU {
         cpu.write_to_reg_or_addr(bus, src, value | mask)
     }
 
-    fn cp(cpu: &mut CPU, bus: &Bus, dst: &SingleRegType, src: &Operand) -> Result<(), GbError> {
+    fn cp(
+        cpu: &mut CPU,
+        bus: &dyn BusAccess,
+        dst: &SingleRegType,
+        src: &Operand,
+    ) -> Result<(), GbError> {
         let left = cpu.read_single_reg(dst);
         let right = ALU::val_from_operand(src, cpu, bus)?;
 

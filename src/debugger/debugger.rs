@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::gbr::instruction::Instruction;
+use crate::gbr::{bus::BusAccess, instruction::Instruction};
 use crate::gbr::{
     game_boy::{GameBoy, GbState},
     memory_map::BOOT_ROM_SIZE,

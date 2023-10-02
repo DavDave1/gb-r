@@ -8,6 +8,13 @@ use super::{
     timer::Timer, GbError,
 };
 
+pub trait BusAccess {
+    fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError>;
+    fn read_byte(&self, addr: u16) -> Result<u8, GbError>;
+    fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError>;
+    fn read_word(&self, addr: u16) -> Result<u16, GbError>;
+}
+
 pub struct Bus {
     boot_rom_lock: bool,
     boot_rom: Box<[u8]>,
@@ -86,8 +93,10 @@ impl Bus {
     pub fn mbc(&self) -> &MBC {
         &self.mbc
     }
+}
 
-    pub fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError> {
+impl BusAccess for Bus {
+    fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError> {
         match map_address(addr)? {
             MappedAddress::CartRom(addr) => {
                 if self.boot_rom_lock {
@@ -122,7 +131,7 @@ impl Bus {
         }
     }
 
-    pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
+    fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
         match map_address(addr)? {
             MappedAddress::CartRom(addr) => {
                 if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
@@ -160,7 +169,7 @@ impl Bus {
         }
     }
 
-    pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
+    fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match map_address(addr)? {
             MappedAddress::CartRom(addr) => self.mbc.write_byte(addr, value)?,
             MappedAddress::VideoRam(addr) => self.ppu.write_byte(addr, value)?,
@@ -189,7 +198,7 @@ impl Bus {
         Ok(())
     }
 
-    pub fn read_word(&self, addr: u16) -> Result<u16, GbError> {
+    fn read_word(&self, addr: u16) -> Result<u16, GbError> {
         match map_address(addr)? {
             MappedAddress::CartRom(addr) => {
                 if self.boot_rom_lock {

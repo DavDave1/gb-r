@@ -1,12 +1,15 @@
 use std::fmt;
 
 use crate::gbr::alu::ALU;
-use crate::gbr::bus::Bus;
 use crate::gbr::GbError;
 
-use super::instruction::{
-    Dest, DoubleRegType, GenericRegType, InstructionType, JumpCondition, JumpType, PostLoad,
-    SingleRegType, Source,
+use super::{
+    bus::BusAccess,
+    instruction::{
+        Dest, DoubleRegType, GenericRegType, InstructionType, JumpCondition, JumpType, PostLoad,
+        SingleRegType, Source,
+    },
+    memory_map::INTERRUPTS_ENABLE_REGISTER,
 };
 
 #[derive(Default, Clone)]
@@ -167,7 +170,11 @@ impl CPU {
         self.reg_sp = value;
     }
 
-    pub fn read_from_reg_or_addr(&self, bus: &Bus, src: &GenericRegType) -> Result<u8, GbError> {
+    pub fn read_from_reg_or_addr(
+        &self,
+        bus: &dyn BusAccess,
+        src: &GenericRegType,
+    ) -> Result<u8, GbError> {
         let val = match src {
             GenericRegType::Single(reg) => self.read_single_reg(reg),
             GenericRegType::Double(reg_addr) => bus.read_byte(self.read_double_reg(reg_addr))?,
@@ -178,7 +185,7 @@ impl CPU {
 
     pub fn write_to_reg_or_addr(
         &mut self,
-        bus: &mut Bus,
+        bus: &mut dyn BusAccess,
         src: &GenericRegType,
         value: u8,
     ) -> Result<(), GbError> {
@@ -247,14 +254,14 @@ impl CPU {
         self.set_carry_flag(c);
     }
 
-    fn push_stack(&mut self, bus: &mut Bus, value: u16) -> Result<(), GbError> {
+    fn push_stack(&mut self, bus: &mut dyn BusAccess, value: u16) -> Result<(), GbError> {
         bus.write_byte(self.reg_sp - 1, (value >> 8) as u8)?;
         bus.write_byte(self.reg_sp - 2, value as u8)?;
         self.reg_sp -= 2;
         Ok(())
     }
 
-    fn pop_stack(&mut self, bus: &mut Bus) -> Result<u16, GbError> {
+    fn pop_stack(&mut self, bus: &dyn BusAccess) -> Result<u16, GbError> {
         let value = bus.read_word(self.reg_sp)?;
         self.reg_sp += 2;
         Ok(value)
@@ -290,7 +297,12 @@ impl CPU {
         false
     }
 
-    fn call(&mut self, bus: &mut Bus, addr: u16, cond: &JumpCondition) -> Result<bool, GbError> {
+    fn call(
+        &mut self,
+        bus: &mut dyn BusAccess,
+        addr: u16,
+        cond: &JumpCondition,
+    ) -> Result<bool, GbError> {
         if self.test_condition(cond) {
             self.push_stack(bus, self.reg_pc)?;
             self.reg_pc = addr;
@@ -301,7 +313,7 @@ impl CPU {
         Ok(false)
     }
 
-    fn ret(&mut self, bus: &mut Bus, cond: &JumpCondition) -> Result<bool, GbError> {
+    fn ret(&mut self, bus: &mut dyn BusAccess, cond: &JumpCondition) -> Result<bool, GbError> {
         if self.test_condition(cond) {
             self.reg_pc = self.pop_stack(bus)?;
             return Ok(true);
@@ -310,7 +322,12 @@ impl CPU {
         Ok(false)
     }
 
-    fn load(&mut self, bus: &Bus, reg: &GenericRegType, source: &Source) -> Result<(), GbError> {
+    fn load(
+        &mut self,
+        bus: &dyn BusAccess,
+        reg: &GenericRegType,
+        source: &Source,
+    ) -> Result<(), GbError> {
         match reg {
             GenericRegType::Double(reg) => match source {
                 Source::Imm16(val) => self.write_double_reg(reg, *val),
@@ -345,7 +362,7 @@ impl CPU {
         Ok(())
     }
 
-    fn store(&mut self, bus: &mut Bus, dest: &Dest, src: &Source) -> Result<(), GbError> {
+    fn store(&mut self, bus: &mut dyn BusAccess, dest: &Dest, src: &Source) -> Result<(), GbError> {
         let addr = match dest {
             Dest::Addr(addr) => *addr,
             Dest::RegAddr(reg_addr) => self.read_double_reg(reg_addr),
@@ -377,7 +394,7 @@ impl CPU {
         }
     }
 
-    pub fn step(&mut self, bus: &mut Bus) -> Result<u8, GbError> {
+    pub fn step(&mut self, bus: &mut dyn BusAccess) -> Result<u8, GbError> {
         let instr = bus.fetch_instruction(self.reg_pc)?;
 
         self.reg_pc += instr.len() as u16;
@@ -391,7 +408,9 @@ impl CPU {
             InstructionType::DaA => return Err(GbError::Unimplemented("DaA instruction".into())),
             InstructionType::FlipCarry => self.set_carry_flag(!self.get_carry_flag()),
             InstructionType::ClearCarry => self.set_carry_flag(false),
-            InstructionType::MasterInterrupt(enable) => bus.ir_handler_mut().set_ime(*enable),
+            InstructionType::MasterInterrupt(enable) => {
+                bus.write_byte(INTERRUPTS_ENABLE_REGISTER, *enable as u8)?
+            }
             InstructionType::Arithmetic(ar_type) => ALU::exec(ar_type, self, bus)?,
             InstructionType::Jump(condition, jump_type) => {
                 jumped = self.jump(condition, jump_type);
