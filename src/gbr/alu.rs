@@ -76,7 +76,7 @@ impl ALU {
         cpu.set_flags(
             result == 0,
             true,
-            ALU::check_h_carry_sub(value, 1),
+            ALU::check_h_carry_sub(value, 1, 0),
             cpu.get_carry_flag(),
         );
 
@@ -116,7 +116,7 @@ impl ALU {
         cpu.set_flags(
             result == 0,
             false,
-            ALU::check_h_carry_sum(value, 1),
+            ALU::check_h_carry_sum(value, 1, 0),
             cpu.get_carry_flag(),
         );
 
@@ -159,19 +159,21 @@ impl ALU {
         with_carry: bool,
     ) -> Result<(), GbError> {
         let left = cpu.read_single_reg(dst);
-        let mut right = ALU::val_from_operand(src, cpu, bus)?;
+        let right = ALU::val_from_operand(src, cpu, bus)?;
 
-        if with_carry {
-            right += cpu.get_carry_flag() as u8;
-        }
+        let carry = if with_carry {
+            cpu.get_carry_flag() as u8
+        } else {
+            0
+        };
 
-        let result_ext = left as u16 + right as u16;
+        let result_ext = left as u16 + right as u16 + carry as u16;
         let result = result_ext as u8;
 
         cpu.set_flags(
             result == 0,
             false,
-            ALU::check_h_carry_sum(left, right),
+            ALU::check_h_carry_sum(left, right, carry),
             result_ext & 0xFF00 != 0,
         );
 
@@ -204,19 +206,21 @@ impl ALU {
         with_carry: bool,
     ) -> Result<(), GbError> {
         let left = cpu.read_single_reg(dst);
-        let mut right = ALU::val_from_operand(src, cpu, bus)?;
+        let right = ALU::val_from_operand(src, cpu, bus)?;
 
-        if with_carry {
-            right += cpu.get_carry_flag() as u8;
-        }
+        let carry = if with_carry {
+            cpu.get_carry_flag() as u8
+        } else {
+            0
+        };
 
-        let result = left.wrapping_sub(right);
+        let result = left.wrapping_sub(right).wrapping_sub(carry);
 
         cpu.set_flags(
             result == 0,
             true,
-            ALU::check_h_carry_sub(left, right),
-            (left as i16 - right as i16) < 0,
+            ALU::check_h_carry_sub(left, right, carry),
+            (left as i16 - right as i16 - carry as i16) < 0,
         );
 
         cpu.write_single_reg(dst, result);
@@ -455,23 +459,26 @@ impl ALU {
         cpu.set_flags(
             result == 0,
             true,
-            ALU::check_h_carry_sub(left, right),
+            ALU::check_h_carry_sub(left, right, 0),
             (left as i16 - right as i16) < 0,
         );
 
         Ok(())
     }
 
-    fn check_h_carry_sum(lv: u8, rv: u8) -> bool {
-        ((lv & 0x0F) + (rv & 0x0F)) > 0x0F
+    fn check_h_carry_sum(lv: u8, rv: u8, carry: u8) -> bool {
+        ((lv & 0x0F) + (rv & 0x0F) + (carry & 0x0F)) > 0x0F
     }
 
     fn check_h_carry_sum16(lv: u16, rv: u16) -> bool {
         ((lv & 0x0FFF) + (rv & 0x0FFF)) > 0x0FFF
     }
 
-    fn check_h_carry_sub(lv: u8, rv: u8) -> bool {
-        ((lv & 0x0F).wrapping_sub(rv & 0x0F)) > 0x0F
+    fn check_h_carry_sub(lv: u8, rv: u8, carry: u8) -> bool {
+        (lv & 0x0F)
+            .wrapping_sub(rv & 0x0F)
+            .wrapping_sub(carry & 0x0F)
+            > 0x0F
     }
 }
 
@@ -516,22 +523,28 @@ mod test {
         let left = 0b00001111_u8;
         let right = 0b00000001_u8;
 
-        assert_eq!(ALU::check_h_carry_sum(left, right), true);
+        assert_eq!(ALU::check_h_carry_sum(left, right, 0), true);
 
         let left = 0b00000111_u8;
         let right = 0b0000001_u8;
 
-        assert_eq!(ALU::check_h_carry_sum(left, right), false);
+        assert_eq!(ALU::check_h_carry_sum(left, right, 0), false);
 
         let left = 0b11110000_u8;
         let right = 0b00000001_u8;
 
-        assert_eq!(ALU::check_h_carry_sum(left, right), false);
+        assert_eq!(ALU::check_h_carry_sum(left, right, 0), false);
 
         let left = 0b11111111_u8;
         let right = 0b00000001_u8;
 
-        assert_eq!(ALU::check_h_carry_sum(left, right), true);
+        assert_eq!(ALU::check_h_carry_sum(left, right, 0), true);
+
+        let left = 0x00;
+        let right = 0x0F;
+        let carry = 1;
+
+        assert_eq!(ALU::check_h_carry_sum(left, right, carry), true);
     }
 
     #[test]
@@ -539,12 +552,18 @@ mod test {
         let left = 0b00000000_u8;
         let right = 0b00000001_u8;
 
-        assert_eq!(ALU::check_h_carry_sub(left, right), true);
+        assert_eq!(ALU::check_h_carry_sub(left, right, 0), true);
 
         let left = 0b00001111_u8;
         let right = 0b00000001_u8;
 
-        assert_eq!(ALU::check_h_carry_sub(left, right), false);
+        assert_eq!(ALU::check_h_carry_sub(left, right, 0), false);
+
+        let left = 0;
+        let right = 0;
+        let carry = 1;
+
+        assert_eq!(ALU::check_h_carry_sub(left, right, carry), true);
     }
 
     #[test]
@@ -729,6 +748,21 @@ mod test {
     }
 
     #[test]
+    fn addition_with_carry() {
+        let mut tester = AluTester::new();
+
+        tester.cpu.write_single_reg(&A, 0x00);
+        tester.cpu.write_single_reg(&B, 0x0F);
+        tester.cpu.set_carry_flag(true);
+
+        tester.exec(Adc(A, Operand::Reg(B)));
+
+        assert_eq!(tester.cpu.read_single_reg(&A), 0x10);
+
+        tester.check_flags(false, false, true, false);
+    }
+
+    #[test]
     fn addition16() {
         let mut tester = AluTester::new();
 
@@ -785,13 +819,27 @@ mod test {
             .with(eq(0x0FA))
             .return_once(|_| Ok(0x01));
 
-        tester.exec(Sub(A, Operand::RegAddr(HL)));
+        tester.exec(Sub(C, Operand::RegAddr(HL)));
 
         assert_eq!(tester.cpu.read_single_reg(&C), 0xFE);
 
         tester.check_flags(false, true, false, false);
     }
 
+    #[test]
+    fn subtraction_with_carry() {
+        let mut tester = AluTester::new();
+
+        tester.cpu.write_single_reg(&A, 0x00);
+        tester.cpu.write_single_reg(&B, 0x00);
+        tester.cpu.set_carry_flag(true);
+
+        tester.exec(Sbc(A, Operand::Reg(B)));
+
+        assert_eq!(tester.cpu.read_single_reg(&A), 0xFF);
+
+        tester.check_flags(false, true, true, true);
+    }
     #[test]
     fn bitwise_and() {
         let mut tester = AluTester::new();
