@@ -107,6 +107,14 @@ impl InterruptHandler {
         }
     }
 
+    pub fn any_pending_interrupt(&self) -> bool {
+        self.test(InterruptType::VBlank)
+            || self.test(InterruptType::LcdStat)
+            || self.test(InterruptType::Timer)
+            || self.test(InterruptType::Serial)
+            || self.test(InterruptType::Joypad)
+    }
+
     pub fn state(&self) -> InterruptHandlerState {
         InterruptHandlerState {
             ime: self.ime,

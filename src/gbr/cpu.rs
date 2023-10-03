@@ -32,6 +32,8 @@ pub struct CpuState {
     pub carry: bool,
     pub bcd_n: bool,
     pub bcd_h: bool,
+
+    pub halted: bool,
 }
 
 impl fmt::Display for CpuState {
@@ -41,7 +43,8 @@ impl fmt::Display for CpuState {
             "Regsisters:\n
             AF {:#06X}, BC {:#06X}, DE {:#06X}, HL {:#06X}, PC {:#06X}, SP {:#06X}\n
             Flags:\n
-            Z {}, C {}, BCD-N {}, BCD-H {}",
+            Z {}, C {}, BCD-N {}, BCD-H {}\n
+            Halted: {}",
             self.af,
             self.bc,
             self.de,
@@ -51,7 +54,8 @@ impl fmt::Display for CpuState {
             self.zero,
             self.carry,
             self.bcd_n,
-            self.bcd_h
+            self.bcd_h,
+            self.halted
         )
     }
 }
@@ -73,14 +77,14 @@ pub struct CPU {
     reg_sp: u16, // stack pointer
 
     low_power_mode: bool,
-    old_ime: bool,
+    halted: bool,
 }
 
 impl CPU {
     pub fn new() -> Self {
         CPU {
             low_power_mode: false,
-            old_ime: false,
+            halted: false,
             ..Default::default()
         }
     }
@@ -402,10 +406,18 @@ impl CPU {
     }
 
     fn goto_interrupt(&mut self, bus: &mut dyn BusAccess, ir_addr: u16) -> Result<(), GbError> {
-        self.old_ime = bus.ir_handler().ime();
         bus.ir_handler_mut().set_ime(false);
         self.push_stack(bus, self.reg_pc)?;
         self.reg_pc = ir_addr;
+        Ok(())
+    }
+
+    fn check_wakeup(&mut self, bus: &mut dyn BusAccess) -> Result<(), GbError> {
+        let ir_handler = bus.ir_handler();
+
+        if ir_handler.ime() && ir_handler.any_pending_interrupt() {
+            self.halted = false;
+        }
         Ok(())
     }
 
@@ -447,7 +459,24 @@ impl CPU {
         Ok(false)
     }
 
+    fn halt(&mut self, bus: &mut dyn BusAccess) {
+        let ir_handler = bus.ir_handler();
+
+        if ir_handler.ime() {
+            self.halted = true;
+        } else if !ir_handler.any_pending_interrupt() {
+            self.halted = true;
+        } else {
+            // TODO halt bug
+            self.halted = false;
+        }
+    }
     pub fn step(&mut self, bus: &mut dyn BusAccess) -> Result<u8, GbError> {
+        if self.halted {
+            self.check_wakeup(bus)?;
+            return Ok(1);
+        }
+
         if self.check_interrupts(bus)? {
             return Ok(5);
         }
@@ -461,7 +490,7 @@ impl CPU {
         match instr.instr_type() {
             InstructionType::Nop => (),
             InstructionType::Stop => self.low_power_mode = true,
-            InstructionType::Halt => return Err(GbError::Unimplemented("Halt instruction".into())),
+            InstructionType::Halt => self.halt(bus),
             InstructionType::FlipCarry => self.set_carry_flag(!self.get_carry_flag()),
             InstructionType::ClearCarry => self.set_carry_flag(false),
             InstructionType::MasterInterrupt(enable) => {
@@ -496,7 +525,7 @@ impl CPU {
             InstructionType::Call(addr, cond) => jumped = self.call(bus, *addr, cond)?,
             InstructionType::Ret(cond) => jumped = self.ret(bus, cond)?,
             InstructionType::RetI => {
-                bus.ir_handler_mut().set_ime(self.old_ime);
+                bus.ir_handler_mut().set_ime(true);
                 jumped = self.ret(bus, &JumpCondition::Always)?;
             }
         }
@@ -516,6 +545,7 @@ impl CPU {
             carry: self.get_carry_flag(),
             bcd_h: self.get_bcd_h_flag(),
             bcd_n: self.get_bcd_n_flag(),
+            halted: self.halted,
         }
     }
 }
