@@ -9,8 +9,15 @@ use super::{
         Dest, DoubleRegType, GenericRegType, InstructionType, JumpCondition, JumpType, PostLoad,
         SingleRegType, Source,
     },
+    interrupts::InterruptType,
     memory_map::INTERRUPTS_ENABLE_REGISTER,
 };
+
+const VBLANK_IR_ADDRESS: u16 = 0x0040;
+const LCD_STAT_IR_ADDRESS: u16 = 0x0048;
+const TIMER_IR_ADDRESS: u16 = 0x0050;
+const SERIAL_IR_ADDRESS: u16 = 0x0058;
+const JOYPAD_IR_ADDRESS: u16 = 0x0060;
 
 #[derive(Default, Clone)]
 pub struct CpuState {
@@ -66,12 +73,14 @@ pub struct CPU {
     reg_sp: u16, // stack pointer
 
     low_power_mode: bool,
+    old_ime: bool,
 }
 
 impl CPU {
     pub fn new() -> Self {
         CPU {
             low_power_mode: false,
+            old_ime: false,
             ..Default::default()
         }
     }
@@ -392,7 +401,57 @@ impl CPU {
         }
     }
 
+    fn goto_interrupt(&mut self, bus: &mut dyn BusAccess, ir_addr: u16) -> Result<(), GbError> {
+        self.old_ime = bus.ir_handler().ime();
+        bus.ir_handler_mut().set_ime(false);
+        self.push_stack(bus, self.reg_pc)?;
+        self.reg_pc = ir_addr;
+        Ok(())
+    }
+
+    fn check_interrupts(&mut self, bus: &mut dyn BusAccess) -> Result<bool, GbError> {
+        let ir_handler = bus.ir_handler_mut();
+        if ir_handler.ime() {
+            if ir_handler.test(InterruptType::VBlank) {
+                ir_handler.clear(InterruptType::VBlank);
+                self.goto_interrupt(bus, VBLANK_IR_ADDRESS)?;
+                log::debug!("Handling VBLANK interrupt");
+                return Ok(true);
+            }
+
+            if ir_handler.test(InterruptType::LcdStat) {
+                ir_handler.clear(InterruptType::LcdStat);
+                self.goto_interrupt(bus, LCD_STAT_IR_ADDRESS)?;
+                return Ok(true);
+            }
+
+            if ir_handler.test(InterruptType::Timer) {
+                ir_handler.clear(InterruptType::Timer);
+                self.goto_interrupt(bus, TIMER_IR_ADDRESS)?;
+                return Ok(true);
+            }
+
+            if ir_handler.test(InterruptType::Serial) {
+                ir_handler.clear(InterruptType::Serial);
+                self.goto_interrupt(bus, SERIAL_IR_ADDRESS)?;
+                return Ok(true);
+            }
+
+            if ir_handler.test(InterruptType::Joypad) {
+                ir_handler.clear(InterruptType::Joypad);
+                self.goto_interrupt(bus, JOYPAD_IR_ADDRESS)?;
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
     pub fn step(&mut self, bus: &mut dyn BusAccess) -> Result<u8, GbError> {
+        if self.check_interrupts(bus)? {
+            return Ok(5);
+        }
+
         let instr = bus.fetch_instruction(self.reg_pc)?;
 
         self.reg_pc += instr.len() as u16;
@@ -437,7 +496,10 @@ impl CPU {
             }
             InstructionType::Call(addr, cond) => jumped = self.call(bus, *addr, cond)?,
             InstructionType::Ret(cond) => jumped = self.ret(bus, cond)?,
-            InstructionType::RetI => return Err(GbError::Unimplemented("Return interrupt".into())),
+            InstructionType::RetI => {
+                bus.ir_handler_mut().set_ime(self.old_ime);
+                jumped = self.ret(bus, &JumpCondition::Always)?;
+            }
         }
 
         Ok(instr.cycles(jumped))

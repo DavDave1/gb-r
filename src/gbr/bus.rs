@@ -17,6 +17,9 @@ pub trait BusAccess {
     fn read_byte(&self, addr: u16) -> Result<u8, GbError>;
     fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError>;
     fn read_word(&self, addr: u16) -> Result<u16, GbError>;
+
+    fn ir_handler(&self) -> &InterruptHandler;
+    fn ir_handler_mut(&mut self) -> &mut InterruptHandler;
 }
 
 pub struct Bus {
@@ -86,14 +89,6 @@ impl Bus {
         &self.io_registers
     }
 
-    pub fn ir_handler(&self) -> &InterruptHandler {
-        &self.ir_handler
-    }
-
-    pub fn ir_handler_mut(&mut self) -> &mut InterruptHandler {
-        &mut self.ir_handler
-    }
-
     pub fn mbc(&self) -> &MBC {
         &self.mbc
     }
@@ -103,7 +98,7 @@ impl BusAccess for Bus {
     fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError> {
         match map_address(addr)? {
             MappedAddress::CartRom(addr) => {
-                if self.boot_rom_lock {
+                if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
                     let len = Instruction::peek_len(self.boot_rom[addr as usize])? as usize;
                     Instruction::decode(&self.boot_rom[addr as usize..addr as usize + len])
                 } else {
@@ -128,10 +123,7 @@ impl BusAccess for Bus {
                     &self.wram_acv_bank[local_addr as usize..local_addr as usize + len],
                 )
             }
-            _ => Err(GbError::IllegalOp(format!(
-                "fetching instruction outside ROM addr space: {:#06X}",
-                addr
-            ))),
+            _ => Err(GbError::AddrOutOfBounds(addr)),
         }
     }
 
@@ -254,5 +246,13 @@ impl BusAccess for Bus {
                 "reading interrupt enable register".into(),
             )),
         }
+    }
+
+    fn ir_handler(&self) -> &InterruptHandler {
+        &self.ir_handler
+    }
+
+    fn ir_handler_mut(&mut self) -> &mut InterruptHandler {
+        &mut self.ir_handler
     }
 }

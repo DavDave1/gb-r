@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use crate::gbr::{bus::Bus, cpu::CPU, ppu::PPU, GbError};
 
 use super::{
-    cpu::CpuState, interrupts::InterruptHandlerState, io_registers::IORegisters, mbc::MbcState,
-    ppu::PpuState,
+    bus::BusAccess, cpu::CpuState, interrupts::InterruptHandlerState, io_registers::IORegisters,
+    mbc::MbcState, ppu::PpuState,
 };
 
 #[derive(Default, Clone)]

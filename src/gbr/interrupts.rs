@@ -98,10 +98,6 @@ impl InterruptHandler {
     }
 
     pub fn test(&self, ir: InterruptType) -> bool {
-        if !self.ime {
-            return false;
-        }
-
         match ir {
             InterruptType::VBlank => self.vblank.enabled && self.vblank.set,
             InterruptType::LcdStat => self.lcd_stat.enabled && self.lcd_stat.set,
