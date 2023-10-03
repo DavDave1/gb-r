@@ -194,14 +194,13 @@ impl Display for Dest {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum SingleRegType {
     A,
     B,
     C,
     D,
     E,
-    F,
     H,
     L,
 }
@@ -214,7 +213,6 @@ impl Display for SingleRegType {
             Self::C => write!(f, "C"),
             Self::D => write!(f, "D"),
             Self::E => write!(f, "E"),
-            Self::F => write!(f, "F"),
             Self::H => write!(f, "H"),
             Self::L => write!(f, "L"),
         }

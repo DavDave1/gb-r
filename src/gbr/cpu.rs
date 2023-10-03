@@ -119,7 +119,6 @@ impl CPU {
             SingleRegType::C => self.reg_c,
             SingleRegType::D => self.reg_d,
             SingleRegType::E => self.reg_e,
-            SingleRegType::F => self.reg_f,
             SingleRegType::H => self.reg_h,
             SingleRegType::L => self.reg_l,
         }
@@ -132,7 +131,6 @@ impl CPU {
             SingleRegType::C => self.reg_c = value,
             SingleRegType::D => self.reg_d = value,
             SingleRegType::E => self.reg_e = value,
-            SingleRegType::F => self.reg_f = value,
             SingleRegType::H => self.reg_h = value,
             SingleRegType::L => self.reg_l = value,
         }
@@ -457,6 +455,126 @@ impl CPU {
             carry: self.get_carry_flag(),
             bcd_h: self.get_bcd_h_flag(),
             bcd_n: self.get_bcd_n_flag(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use mockall::predicate::eq;
+
+    use crate::gbr::{
+        bus::MockBusAccess,
+        instruction::{opcode::Opcode, GenericRegType::*, Instruction, SingleRegType::*, Source},
+    };
+
+    use super::CPU;
+
+    struct CpuTester {
+        cpu: CPU,
+        bus: MockBusAccess,
+    }
+
+    impl CpuTester {
+        fn new() -> Self {
+            Self {
+                cpu: CPU::new(),
+                bus: MockBusAccess::new(),
+            }
+        }
+
+        fn exec(&mut self, opcode: Opcode, data: &[u8]) -> u8 {
+            let mut instr_data = vec![0; data.len() + 1];
+            instr_data[0] = opcode as u8;
+            instr_data[1..].copy_from_slice(data);
+
+            let instr = Instruction::decode(&instr_data).unwrap();
+            self.bus
+                .expect_fetch_instruction()
+                .return_once(|_| Ok(instr));
+
+            for d in data {
+                let v = *d;
+                self.bus.expect_read_byte().return_once(move |_| Ok(v));
+            }
+
+            self.cpu.step(&mut self.bus).unwrap()
+        }
+    }
+
+    #[test]
+    fn stop() {
+        let mut tester = CpuTester::new();
+
+        let cycles = tester.exec(Opcode::Stop, &[0; 0]);
+
+        assert_eq!(cycles, 1);
+        assert_eq!(tester.cpu.low_power_mode, true);
+    }
+
+    #[test]
+    fn load_byte_imm() {
+        let mut tester = CpuTester::new();
+
+        let cycles = tester.exec(Opcode::LdAd8, &[0xAB]);
+
+        assert_eq!(cycles, 2);
+        assert_eq!(tester.cpu.read_single_reg(&A), 0xAB);
+    }
+
+    #[test]
+    fn load_word_imm() {
+        let mut tester = CpuTester::new();
+
+        let cycles = tester.exec(Opcode::LdHLd16, &[0xAB, 0xBA]);
+
+        assert_eq!(cycles, 3);
+        assert_eq!(tester.cpu.read_hl(), 0xBAAB);
+    }
+
+    #[test]
+    fn load_byte_from_addr() {
+        let mut tester = CpuTester::new();
+
+        tester
+            .bus
+            .expect_read_byte()
+            .with(eq(0xBBAA))
+            .return_once(|_| Ok(0x12));
+
+        let cycles = tester.exec(Opcode::LdAa16, &[0xAA, 0xBB]);
+
+        assert_eq!(cycles, 4);
+        assert_eq!(tester.cpu.read_single_reg(&A), 0x12);
+    }
+
+    #[test]
+    fn copy_single_reg() {
+        let mut tester = CpuTester::new();
+
+        let single_regs = [A, B, C, D, E, H, L];
+
+        for src in &single_regs {
+            tester.cpu.write_single_reg(src, 0xA);
+
+            for dst in &single_regs {
+                if dst != src {
+                    tester.cpu.write_single_reg(dst, 0x00);
+                }
+
+                tester
+                    .cpu
+                    .load(&mut tester.bus, &Single(*dst), &Source::RegImm(*src))
+                    .unwrap();
+
+                assert_eq!(
+                    tester.cpu.read_single_reg(dst),
+                    0xA,
+                    "Reg {} = {}",
+                    dst,
+                    src
+                );
+            }
         }
     }
 }
