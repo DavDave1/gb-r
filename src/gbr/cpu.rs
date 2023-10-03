@@ -493,9 +493,7 @@ impl CPU {
             InstructionType::Halt => self.halt(bus),
             InstructionType::FlipCarry => self.set_carry_flag(!self.get_carry_flag()),
             InstructionType::ClearCarry => self.set_carry_flag(false),
-            InstructionType::MasterInterrupt(enable) => {
-                bus.write_byte(INTERRUPTS_ENABLE_REGISTER, *enable as u8)?
-            }
+            InstructionType::MasterInterrupt(enable) => bus.ir_handler_mut().set_ime(*enable),
             InstructionType::Arithmetic(ar_type) => ALU::exec(ar_type, self, bus)?,
             InstructionType::Jump(condition, jump_type) => {
                 jumped = self.jump(condition, jump_type);
@@ -557,6 +555,7 @@ mod tests {
     use crate::gbr::{
         bus::MockBusAccess,
         instruction::{opcode::Opcode, GenericRegType::*, Instruction, SingleRegType::*, Source},
+        interrupts::InterruptHandler,
     };
 
     use super::CPU;
@@ -568,6 +567,14 @@ mod tests {
 
     impl CpuTester {
         fn new() -> Self {
+            let mut bus = MockBusAccess::new();
+
+            bus.expect_ir_handler()
+                .return_const(InterruptHandler::default());
+
+            bus.expect_ir_handler_mut()
+                .return_var(InterruptHandler::default());
+
             Self {
                 cpu: CPU::new(),
                 bus: MockBusAccess::new(),
