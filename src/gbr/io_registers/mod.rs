@@ -27,14 +27,10 @@ impl IORegisters {
             0xFF00 => Ok(self.port_p1 = value),
             0xFF01 => Ok(self.serial_data = value),
             0xFF02 => Ok(self.serial_control = value),
-            0xFF4C..=0xFF7F => {
-                log::warn!("Write {:#04X} to unknown register {:#06X}", value, addr);
+            _ => {
+                log::warn!("Write {:#04X} to unknown IO register {:#06X}", value, addr);
                 Ok(())
             }
-            _ => Err(GbError::Unimplemented(format!(
-                "write to io register {:#06X}",
-                addr
-            ))),
         }
     }
 
@@ -43,10 +39,10 @@ impl IORegisters {
             0xFF00 => Ok(self.port_p1),
             0xFF01 => Ok(self.serial_data),
             0xFF02 => Ok(self.serial_control),
-            _ => Err(GbError::Unimplemented(format!(
-                "read from io register {:#06X}",
-                addr
-            ))),
+            _ => {
+                log::warn!("Read from unknown IO register {:#06X}", addr);
+                Ok(0xFF)
+            }
         }
     }
 }
