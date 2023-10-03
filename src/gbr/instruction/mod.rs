@@ -13,7 +13,6 @@ pub enum InstructionType {
     Nop,
     Stop,
     Halt,
-    DaA,
     FlipCarry,
     ClearCarry,
     MasterInterrupt(bool), // enable/disable
@@ -75,6 +74,7 @@ pub enum ArithmeticType {
     SetBit(GenericRegType, u8),
     ResetBit(GenericRegType, u8),
     Swap(GenericRegType),
+    Da(SingleRegType),
 }
 
 impl Display for ArithmeticType {
@@ -130,6 +130,7 @@ impl Display for ArithmeticType {
             Self::ResetBit(reg, bit) => write!(f, "ResetBit({}, {})", reg, bit),
             Self::SetBit(reg, bit) => write!(f, "SetBit({}, {})", reg, bit),
             Self::Swap(reg) => write!(f, "Swap({})", reg),
+            Self::Da(reg) => write!(f, "Da({})", reg),
         }
     }
 }
@@ -313,7 +314,7 @@ impl Instruction {
             Opcode::Nop => Nop,
             Opcode::Stop => Stop,
             Opcode::Halt => Halt,
-            Opcode::DaA => DaA,
+            Opcode::DaA => Arithmetic(Da(A)),
             Opcode::Scf => FlipCarry,
             Opcode::Ccf => ClearCarry,
             Opcode::Di => MasterInterrupt(false),
@@ -554,7 +555,12 @@ impl Instruction {
             Opcode::RetC => Ret(Carry),
             Opcode::RetNC => Ret(NotCarry),
             Opcode::RetI => RetI,
-            Opcode::Prefix => Instruction::decode_cb(memory[1])?,
+            Opcode::Prefix => {
+                cb_opcode = Some(
+                    CbOpcode::from_u8(memory[1]).ok_or(GbError::UnknownCbInstruction(memory[1]))?,
+                );
+                Instruction::decode_cb(memory[1])?
+            }
         };
 
         Ok(Self {
@@ -864,7 +870,6 @@ impl Display for Instruction {
             Nop => write!(f, "Nop"),
             Stop => write!(f, "Stop"),
             Halt => write!(f, "Halt"),
-            DaA => write!(f, "DaA"),
             FlipCarry => write!(f, "Flip CY"),
             ClearCarry => write!(f, "Clear CY"),
             MasterInterrupt(enable) => write!(f, "IME {}", enable),

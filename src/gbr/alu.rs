@@ -53,6 +53,7 @@ impl ALU {
             Xor(dst, src) => ALU::xor(cpu, bus, dst, src),
             Cpl(reg) => Ok(ALU::cpl(cpu, reg)),
             Swap(reg) => ALU::swap(cpu, bus, reg),
+            Da(reg) => Ok(ALU::da(cpu, reg)),
         }
     }
 
@@ -282,6 +283,34 @@ impl ALU {
         cpu.set_zero_flag(result == 0);
 
         cpu.write_to_reg_or_addr(bus, src, result)
+    }
+
+    // Impl from https://forums.nesdev.org/viewtopic.php?t=15944
+    fn da(cpu: &mut CPU, src: &SingleRegType) {
+        let mut val = cpu.read_single_reg(src);
+        // BCD addition
+        if cpu.get_bcd_n_flag() {
+            if cpu.get_carry_flag() || val > 0x99 {
+                val += 0x60;
+                cpu.set_carry_flag(true);
+            }
+            if cpu.get_bcd_h_flag() || ((val & 0x0F) > 0x09) {
+                val += 0x06;
+            }
+        }
+        // BCP subtraction
+        else {
+            if cpu.get_carry_flag() {
+                val -= 0x60;
+            }
+            if cpu.get_bcd_h_flag() {
+                val -= 0x06;
+            }
+        }
+
+        cpu.write_single_reg(src, val);
+        cpu.set_zero_flag(val == 0);
+        cpu.set_bcd_n_flag(false);
     }
 
     fn cpl(cpu: &mut CPU, reg: &SingleRegType) {

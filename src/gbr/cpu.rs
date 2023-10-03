@@ -462,7 +462,6 @@ impl CPU {
             InstructionType::Nop => (),
             InstructionType::Stop => self.low_power_mode = true,
             InstructionType::Halt => return Err(GbError::Unimplemented("Halt instruction".into())),
-            InstructionType::DaA => return Err(GbError::Unimplemented("DaA instruction".into())),
             InstructionType::FlipCarry => self.set_carry_flag(!self.get_carry_flag()),
             InstructionType::ClearCarry => self.set_carry_flag(false),
             InstructionType::MasterInterrupt(enable) => {
