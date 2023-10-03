@@ -1,3 +1,5 @@
+use super::CH3_WAVE_PATTERN_RAM_SIZE;
+
 #[derive(Default)]
 enum SweepDirection {
     #[default]
@@ -217,12 +219,31 @@ pub struct Channel3 {
     output_level: OutputLevel,
     period: u16,
     ctrl: ChannelControl,
-    wave_pattern: [u8; 2],
+    pub wave_pattern: [u8; CH3_WAVE_PATTERN_RAM_SIZE],
 }
 
 impl Channel3 {
     pub fn write_enable(&mut self, value: u8) {
         self.enable = value & 0b10000000 != 0;
+    }
+
+    pub fn write_length_timer(&mut self, value: u8) {
+        self.length_timer = value;
+    }
+
+    pub fn write_output_level(&mut self, value: u8) {
+        self.output_level = value.into();
+    }
+
+    pub fn write_period_low(&mut self, value: u8) {
+        self.period = self.period & 0xFF00 + value as u16;
+    }
+
+    pub fn write_period_high_and_ctrl(&mut self, value: u8) {
+        let period_high = (value & 0b00000111) as u16;
+        self.period = period_high << 8 + self.period & 0x00FF;
+
+        self.ctrl.write(value);
     }
 }
 

@@ -16,6 +16,10 @@ const CH2_PERIOD_LOW_REG_ADDR: u16 = 0xFF18;
 const CH2_PERIOD_HIGH_AND_CTRL_REG_ADDR: u16 = 0xFF19;
 
 const CH3_DAC_ENABLE_REG_ADDR: u16 = 0xFF1A;
+const CH3_LENGTH_TIMER_REG_ADDR: u16 = 0xFF1B;
+const CH3_OUTPUT_LEVEL_REG_ADDR: u16 = 0xFF1C;
+const CH3_PERIOD_LOW_REG_ADDR: u16 = 0xFF1D;
+const CH3_PERIOD_HIGH_AND_CTRL_REG_ADDR: u16 = 0xFF1E;
 
 const CH4_ENVELOPE_REG_ADDR: u16 = 0xFF21;
 const CH4_CONTROL_REG_ADDR: u16 = 0xFF23;
@@ -23,6 +27,11 @@ const CH4_CONTROL_REG_ADDR: u16 = 0xFF23;
 const VOLUME_CTRL_REG_ADDR: u16 = 0xFF24;
 const OUTPUT_SELECT_REG_ADDR: u16 = 0xFF25;
 const SOUND_ENABLE_REG_ADDR: u16 = 0xFF26;
+
+const CH3_WAVE_PATTERN_RAM_BEGIN: u16 = 0xFF30;
+const CH3_WAVE_PATTERN_RAM_END: u16 = 0xFF3F;
+const CH3_WAVE_PATTERN_RAM_SIZE: usize =
+    (CH3_WAVE_PATTERN_RAM_END - CH3_WAVE_PATTERN_RAM_BEGIN) as usize + 1;
 
 pub struct APU {
     sound_enable: u8,
@@ -73,6 +82,10 @@ impl APU {
             CH2_PERIOD_LOW_REG_ADDR => self.ch2.write_period_low(value),
             CH2_PERIOD_HIGH_AND_CTRL_REG_ADDR => self.ch2.write_period_high_and_ctrl(value),
             CH3_DAC_ENABLE_REG_ADDR => self.ch3.write_enable(value),
+            CH3_LENGTH_TIMER_REG_ADDR => self.ch3.write_length_timer(value),
+            CH3_OUTPUT_LEVEL_REG_ADDR => self.ch3.write_output_level(value),
+            CH3_PERIOD_LOW_REG_ADDR => self.ch3.write_period_low(value),
+            CH3_PERIOD_HIGH_AND_CTRL_REG_ADDR => self.ch3.write_period_high_and_ctrl(value),
             CH4_ENVELOPE_REG_ADDR => self.ch4.write_envelope(value),
             CH4_CONTROL_REG_ADDR => self.ch4.write_control(value),
             VOLUME_CTRL_REG_ADDR => self.sound_channel_volume_control = value,
@@ -86,6 +99,9 @@ impl APU {
                 } else {
                     self.sound_enable = value
                 }
+            }
+            CH3_WAVE_PATTERN_RAM_BEGIN..=CH3_WAVE_PATTERN_RAM_END => {
+                self.ch3.wave_pattern[(addr - CH3_WAVE_PATTERN_RAM_BEGIN) as usize] = value
             }
             _ => {
                 return Err(GbError::IllegalOp(format!(
