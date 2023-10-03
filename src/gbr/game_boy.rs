@@ -32,7 +32,7 @@ impl GameBoy {
     pub fn step(&mut self) -> Result<bool, GbError> {
         let cycles = self.cpu.step(&mut self.bus)?;
 
-        self.bus.step(cycles)
+        self.bus.step(4 * cycles)
     }
 
     pub fn reset(&mut self) {
