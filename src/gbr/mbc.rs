@@ -94,7 +94,17 @@ impl MBC {
         match addr {
             CART_ROM_BANK0_START..=CART_ROM_BANK0_END => Ok(self.rom[addr as usize]),
             CART_ROM_ACTIVE_BANK_START..=CART_ROM_ACTIVE_BANK_END => {
-                Ok(self.rom[self.rom_relative_addr(addr)])
+                let rel_addr = self.rom_relative_addr(addr);
+                if rel_addr > self.rom.len() {
+                    log::error!(
+                        "Reading from rom addr {:#06X}, rel addr {:#08X}, act bank {}",
+                        addr,
+                        rel_addr,
+                        self.active_rom_bank
+                    );
+                    return Err(GbError::AddrOutOfBounds(addr));
+                }
+                Ok(self.rom[rel_addr])
             }
             CART_RAM_START..=CART_RAM_END => {
                 let val = if self.ram_enable {
@@ -119,11 +129,18 @@ impl MBC {
                     v = 1;
                 }
 
-                self.active_rom_bank = self.active_rom_bank & 0b0000000011100000 + v as u16;
+                self.active_rom_bank = (self.active_rom_bank & 0b0000000011100000) + v as u16;
+
+                if self.active_rom_bank == 0 {
+                    return Err(GbError::IllegalOp(format!(
+                        "Active rom bank set to 0. Input {:#04X}",
+                        byte
+                    )));
+                }
             }
             BANK_REG2_START..=BANK_REG2_END => {
                 self.active_rom_bank =
-                    self.active_rom_bank & 0b0000000000011111 + (byte & 0b01100000) as u16;
+                    (self.active_rom_bank & 0b0000000000011111) + (byte & 0b01100000) as u16;
                 if self.ram_banks_count > 1 {
                     self.active_ram_bank = (byte & 0b01100000 >> 5) as u16;
                 }
