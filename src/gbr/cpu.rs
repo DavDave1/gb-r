@@ -289,11 +289,7 @@ impl CPU {
         if self.test_condition(condition) {
             match jump_type {
                 JumpType::Offset(offset) => {
-                    if *offset < 0 {
-                        self.reg_pc -= offset.abs() as u16;
-                    } else {
-                        self.reg_pc += *offset as u16;
-                    }
+                    self.reg_pc = (self.reg_pc as i32 + *offset as i32) as u16
                 }
                 JumpType::Addr(addr) => self.reg_pc = *addr,
                 JumpType::RegAddr(reg) => self.reg_pc = self.read_double_reg(reg),
@@ -340,11 +336,8 @@ impl CPU {
             GenericRegType::Double(reg) => match source {
                 Source::Imm16(val) => self.write_double_reg(reg, *val),
                 Source::SpWithOffset(offset) => {
-                    if *offset < 0 {
-                        self.write_double_reg(reg, self.reg_sp - *offset as u16);
-                    } else {
-                        self.write_double_reg(reg, self.reg_sp + *offset as u16);
-                    }
+                    let sp = (self.reg_sp as i32 + *offset as i32) as u16;
+                    self.write_double_reg(reg, sp);
                 }
                 _ => return Err(GbError::IllegalOp("load u8 into double register".into())),
             },
