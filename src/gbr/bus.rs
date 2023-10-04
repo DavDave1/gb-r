@@ -27,7 +27,6 @@ pub struct Bus {
     boot_rom: Box<[u8]>,
     hram: Box<[u8]>,
     wram: Box<[u8]>,
-    wram_acv_bank: Box<[u8]>,
     oam: ObjAttributeMemory,
     io_registers: IORegisters,
     ppu: PPU,
@@ -56,8 +55,7 @@ impl Bus {
             boot_rom_lock: true,
             boot_rom: boot_rom.into_boxed_slice(),
             hram: vec![0; HRAM_SIZE].into_boxed_slice(),
-            wram: vec![0; WRAM_BANK0_SIZE].into_boxed_slice(),
-            wram_acv_bank: vec![0; WRAM_ACTIVE_BANK_SIZE].into_boxed_slice(),
+            wram: vec![0; WRAM_SIZE].into_boxed_slice(),
             oam: ObjAttributeMemory::new(),
             io_registers: IORegisters::default(),
             ppu: PPU::new(),
@@ -111,18 +109,12 @@ impl BusAccess for Bus {
                     Instruction::decode(&instr_data)
                 }
             }
-            MappedAddress::WorkRamBank0(addr) => {
-                let local_addr = addr - WRAM_BANK0_START;
+            MappedAddress::WorkRam(addr) => {
+                let local_addr = addr - WRAM_START;
                 let len = Instruction::peek_len(self.wram[local_addr as usize])? as usize;
                 Instruction::decode(&self.wram[local_addr as usize..local_addr as usize + len])
             }
-            MappedAddress::WorkRamActiveBank(addr) => {
-                let local_addr = addr - WRAM_ACTIVE_BANK_START;
-                let len = Instruction::peek_len(self.wram_acv_bank[local_addr as usize])? as usize;
-                Instruction::decode(
-                    &self.wram_acv_bank[local_addr as usize..local_addr as usize + len],
-                )
-            }
+
             _ => Err(GbError::AddrOutOfBounds(addr)),
         }
     }
@@ -138,10 +130,7 @@ impl BusAccess for Bus {
             }
             MappedAddress::VideoRam(addr) => self.ppu.read_byte(addr),
             MappedAddress::CartRam(addr) => self.mbc.read_byte(addr),
-            MappedAddress::WorkRamBank0(addr) => Ok(self.wram[(addr - WRAM_BANK0_START) as usize]),
-            MappedAddress::WorkRamActiveBank(addr) => {
-                Ok(self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize])
-            }
+            MappedAddress::WorkRam(addr) => Ok(self.wram[(addr - WRAM_START) as usize]),
             MappedAddress::ObjectAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading object attribute table".into(),
             )),
@@ -170,11 +159,8 @@ impl BusAccess for Bus {
             MappedAddress::CartRom(addr) => self.mbc.write_byte(addr, value)?,
             MappedAddress::VideoRam(addr) => self.ppu.write_byte(addr, value)?,
             MappedAddress::CartRam(addr) => self.mbc.write_byte(addr, value)?,
-            MappedAddress::WorkRamBank0(addr) => {
-                self.wram[(addr - WRAM_BANK0_START) as usize] = value;
-            }
-            MappedAddress::WorkRamActiveBank(addr) => {
-                self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize] = value;
+            MappedAddress::WorkRam(addr) => {
+                self.wram[(addr - WRAM_START) as usize] = value;
             }
             MappedAddress::ObjectAttributeTable(addr) => self.oam.write_byte(addr, value)?,
             MappedAddress::NotUsable(addr) => {
@@ -205,11 +191,8 @@ impl BusAccess for Bus {
             }
             MappedAddress::VideoRam(addr) => self.ppu.read_word(addr),
             MappedAddress::CartRam(_addr) => self.mbc.read_word(addr),
-            MappedAddress::WorkRamBank0(_addr) => Ok(LittleEndian::read_u16(
-                &self.wram[(addr - WRAM_BANK0_START) as usize..],
-            )),
-            MappedAddress::WorkRamActiveBank(addr) => Ok(LittleEndian::read_u16(
-                &self.wram_acv_bank[(addr - WRAM_ACTIVE_BANK_START) as usize..],
+            MappedAddress::WorkRam(_addr) => Ok(LittleEndian::read_u16(
+                &self.wram[(addr - WRAM_START) as usize..],
             )),
             MappedAddress::ObjectAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),

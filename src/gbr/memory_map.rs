@@ -14,14 +14,9 @@ pub const VRAM_SIZE: usize = (VRAM_END - VRAM_START + 1) as usize;
 pub const CART_RAM_START: u16 = 0xA000;
 pub const CART_RAM_END: u16 = 0xBFFF;
 
-pub const WRAM_BANK0_START: u16 = 0xC000;
-const WRAM_BANK0_END: u16 = 0xCFFF;
-pub const WRAM_BANK0_SIZE: usize = (WRAM_BANK0_END - WRAM_BANK0_START + 1) as usize;
-
-pub const WRAM_ACTIVE_BANK_START: u16 = 0xD000;
-const WRAM_ACTIVE_BANK_END: u16 = 0xDFFF;
-pub const WRAM_ACTIVE_BANK_SIZE: usize =
-    (WRAM_ACTIVE_BANK_END - WRAM_ACTIVE_BANK_START + 1) as usize;
+pub const WRAM_START: u16 = 0xC000;
+const WRAM_END: u16 = 0xDFFF;
+pub const WRAM_SIZE: usize = (WRAM_END - WRAM_START + 1) as usize;
 
 const ECHO_RAM_START: u16 = 0xE000;
 const ECHO_RAM_END: u16 = 0xFDFF;
@@ -64,8 +59,7 @@ pub enum MappedAddress {
     CartRom(u16),
     VideoRam(u16),
     CartRam(u16),
-    WorkRamBank0(u16),
-    WorkRamActiveBank(u16),
+    WorkRam(u16),
     //  EchoRam(u16),
     ObjectAttributeTable(u16),
     NotUsable(u16),
@@ -85,8 +79,7 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
         CART_ROM_BANK0_START..=CART_ROM_ACTIVE_BANK_END => Ok(MappedAddress::CartRom(addr)),
         VRAM_START..=VRAM_END => Ok(MappedAddress::VideoRam(addr)),
         CART_RAM_START..=CART_RAM_END => Ok(MappedAddress::CartRam(addr)),
-        WRAM_BANK0_START..=WRAM_BANK0_END => Ok(MappedAddress::WorkRamBank0(addr)),
-        WRAM_ACTIVE_BANK_START..=WRAM_ACTIVE_BANK_END => Ok(MappedAddress::WorkRamActiveBank(addr)),
+        WRAM_START..=WRAM_END => Ok(MappedAddress::WorkRam(addr)),
         ECHO_RAM_START..=ECHO_RAM_END => Err(GbError::IllegalOp(format!(
             "access to echo RAM {:#06X}",
             addr
