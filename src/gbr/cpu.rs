@@ -76,6 +76,8 @@ pub struct CPU {
     reg_pc: u16, // program counter
     reg_sp: u16, // stack pointer
 
+    pub reg_pc_prev: u16,
+
     low_power_mode: bool,
     ime: bool,
     halted: bool,
@@ -474,6 +476,8 @@ impl CPU {
         }
 
         let instr = bus.fetch_instruction(self.reg_pc)?;
+
+        self.reg_pc_prev = self.reg_pc;
 
         self.reg_pc += instr.len() as u16;
 

@@ -52,7 +52,7 @@ impl Debugger {
         let mut disassembly = AsmState::new();
         disassembly.reserve(20);
 
-        let mut pc = emu.cpu().read_pc();
+        let mut pc = emu.cpu().reg_pc_prev;
 
         loop {
             let instruction = match emu.bus().fetch_instruction(pc) {
