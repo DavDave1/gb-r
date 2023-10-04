@@ -46,7 +46,7 @@ impl DebuggerApp {
         let debugger = Debugger::new();
 
         let gb_state = debugger.gb_state.clone();
-        let asm = Debugger::disassemble(game_boy.clone());
+        let asm_state = debugger.asm_state.clone();
 
         let (cmd_sig, emu_state_slot) = DebuggerApp::start_emu_thread(game_boy.clone(), debugger);
 
@@ -80,9 +80,9 @@ impl DebuggerApp {
         let mut ui = Ui::new(
             self.collector.clone(),
             gb_state,
+            asm_state,
             cmd_sig,
             emu_state_slot,
-            asm,
             &event_loop,
             width,
             height,
@@ -162,7 +162,7 @@ impl DebuggerApp {
         let frame_time = Duration::from_secs_f64(1.0 / 59.7);
 
         std::thread::spawn(move || {
-            let mut emu: std::sync::RwLockWriteGuard<'_, GameBoy> = emu.write().unwrap();
+            let mut emu = emu.write().unwrap();
 
             let mut running = false;
             let mut stepping = false;
@@ -172,6 +172,9 @@ impl DebuggerApp {
                 {
                     let mut state = debugger.gb_state.write().unwrap();
                     *state = emu.collect_state();
+
+                    let mut asm = debugger.asm_state.write().unwrap();
+                    *asm = Debugger::disassemble(&emu);
                 }
 
                 let cmd = if !running {

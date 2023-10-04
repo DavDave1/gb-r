@@ -30,22 +30,23 @@ struct UiState {
     show_tiles: bool,
     gb_state_next: Arc<RwLock<GbState>>,
     gb_state: GbState,
+    asm_state_next: Arc<RwLock<AsmState>>,
+    asm_state: AsmState,
     cmd_sig: Sender<DebuggerCommand>,
     tiles_view: TilesView,
     palette_view: PaletteView,
     emu_state: EmuState,
     emu_state_slot: Receiver<EmuState>,
     breakpoints: HashSet<u16>,
-    asm: AsmState,
 }
 
 impl UiState {
     fn new(
         collector: EventCollector,
         gb_state: Arc<RwLock<GbState>>,
+        asm_state: Arc<RwLock<AsmState>>,
         cmd_sig: Sender<DebuggerCommand>,
         emu_state_slot: Receiver<EmuState>,
-        asm: AsmState,
     ) -> Self {
         Self {
             collector,
@@ -55,13 +56,14 @@ impl UiState {
             show_tiles: true,
             gb_state_next: gb_state,
             gb_state: GbState::default(),
+            asm_state_next: asm_state,
+            asm_state: AsmState::default(),
             cmd_sig,
             tiles_view: TilesView::default(),
             palette_view: PaletteView::new(),
             emu_state: EmuState::Idle,
             emu_state_slot,
             breakpoints: HashSet::new(),
-            asm,
         }
     }
 
@@ -72,6 +74,10 @@ impl UiState {
 
         if let Ok(state) = self.gb_state_next.try_read() {
             self.gb_state = state.clone();
+        }
+
+        if let Ok(state) = self.asm_state_next.try_read() {
+            self.asm_state = state.clone();
         }
     }
 
@@ -154,7 +160,7 @@ impl UiState {
                     ui.separator();
                     asm_view::show(
                         &self.cmd_sig,
-                        &self.asm,
+                        &self.asm_state,
                         &self.gb_state.cpu,
                         &mut self.breakpoints,
                         ui,
@@ -229,9 +235,9 @@ impl Ui {
     pub fn new<T>(
         collector: EventCollector,
         gb_state: Arc<RwLock<GbState>>,
+        asm_state: Arc<RwLock<AsmState>>,
         cmd_sig: Sender<DebuggerCommand>,
         emu_state_slot: Receiver<EmuState>,
-        asm: AsmState,
         event_loop: &EventLoopWindowTarget<T>,
         width: u32,
         height: u32,
@@ -258,7 +264,7 @@ impl Ui {
             renderer,
             paint_jobs: vec![],
             textures: TexturesDelta::default(),
-            state: UiState::new(collector, gb_state, cmd_sig, emu_state_slot, asm),
+            state: UiState::new(collector, gb_state, asm_state, cmd_sig, emu_state_slot),
         }
     }
 

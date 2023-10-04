@@ -9,7 +9,7 @@ macro_rules! jumped {
 }
 
 enum_from_primitive! {
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Opcode {
     Nop = 0x00,
     LdBCd16 = 0x01,
@@ -425,7 +425,7 @@ impl Opcode {
 }
 
 enum_from_primitive! {
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum CbOpcode {
     RlcB = 0x00,
     RlcC = 0x01,

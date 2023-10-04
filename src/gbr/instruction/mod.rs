@@ -9,6 +9,7 @@ use super::GbError;
 
 use self::opcode::{CbOpcode, Opcode};
 
+#[derive(Clone)]
 pub enum InstructionType {
     Nop,
     Stop,
@@ -31,6 +32,7 @@ pub enum InstructionType {
     RetI,
 }
 
+#[derive(Clone)]
 pub enum JumpType {
     Offset(i8),
     Addr(u16),
@@ -47,6 +49,7 @@ impl Display for JumpType {
     }
 }
 
+#[derive(Clone)]
 pub enum ArithmeticType {
     Inc(GenericRegType),
     IncAddr(DoubleRegType),
@@ -135,6 +138,7 @@ impl Display for ArithmeticType {
     }
 }
 
+#[derive(Clone)]
 pub enum Operand {
     Imm(u8),
     Reg(SingleRegType),
@@ -151,6 +155,7 @@ impl Display for Operand {
     }
 }
 
+#[derive(Clone)]
 pub enum Source {
     RegImm(SingleRegType),
     RegAddr(DoubleRegType),
@@ -177,6 +182,7 @@ impl Display for Source {
     }
 }
 
+#[derive(Clone)]
 pub enum Dest {
     Addr(u16),
     RegAddr(DoubleRegType),
@@ -220,6 +226,7 @@ impl Display for SingleRegType {
     }
 }
 
+#[derive(Clone)]
 pub enum DoubleRegType {
     AF,
     BC,
@@ -240,6 +247,7 @@ impl Display for DoubleRegType {
     }
 }
 
+#[derive(Clone)]
 pub enum GenericRegType {
     Single(SingleRegType),
     Double(DoubleRegType),
@@ -254,6 +262,7 @@ impl Display for GenericRegType {
     }
 }
 
+#[derive(Clone)]
 pub enum JumpCondition {
     Always,
     Zero,
@@ -274,6 +283,7 @@ impl Display for JumpCondition {
     }
 }
 
+#[derive(Clone)]
 pub enum PostStore {
     Inc,
     Dec,
@@ -290,6 +300,7 @@ impl Display for PostStore {
     }
 }
 
+#[derive(Clone)]
 pub struct Instruction {
     instr: InstructionType,
     opcode: Opcode,
