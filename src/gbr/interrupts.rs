@@ -14,7 +14,6 @@ pub enum InterruptType {
 
 #[derive(Default, Clone)]
 pub struct InterruptHandlerState {
-    pub ime: bool,
     pub vblank: Interrupt,
     pub lcd_stat: Interrupt,
     pub timer: Interrupt,
@@ -24,7 +23,6 @@ pub struct InterruptHandlerState {
 
 #[derive(Default, Clone)]
 pub struct InterruptHandler {
-    ime: bool,
     vblank: Interrupt,
     lcd_stat: Interrupt,
     timer: Interrupt,
@@ -33,14 +31,6 @@ pub struct InterruptHandler {
 }
 
 impl InterruptHandler {
-    pub fn set_ime(&mut self, enabled: bool) {
-        self.ime = enabled;
-    }
-
-    pub fn ime(&self) -> bool {
-        self.ime
-    }
-
     pub fn write_if(&mut self, value: u8) {
         self.vblank.set = value & 0b00000001 != 0;
         self.lcd_stat.set = value & 0b00000010 != 0;
@@ -55,6 +45,14 @@ impl InterruptHandler {
         self.timer.enabled = value & 0b00000100 != 0;
         self.serial.enabled = value & 0b00001000 != 0;
         self.joypad.enabled = value & 0b00010000 != 0;
+    }
+
+    pub fn read_ie(&self) -> u8 {
+        self.vblank.enabled as u8
+            | (self.lcd_stat.enabled as u8) << 1
+            | (self.timer.enabled as u8) << 2
+            | (self.serial.enabled as u8) << 3
+            | (self.joypad.enabled as u8) << 4
     }
 
     pub fn enable(&mut self, ir: InterruptType) {
@@ -117,7 +115,6 @@ impl InterruptHandler {
 
     pub fn state(&self) -> InterruptHandlerState {
         InterruptHandlerState {
-            ime: self.ime,
             vblank: self.vblank,
             lcd_stat: self.lcd_stat,
             timer: self.timer,

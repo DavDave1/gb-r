@@ -161,7 +161,7 @@ impl BusAccess for Bus {
             MappedAddress::InterruptFlagRegister => Err(GbError::Unimplemented(
                 "reading interrupt flag register".into(),
             )),
-            MappedAddress::InterruptEnableRegister => Ok(self.ir_handler.ime() as u8),
+            MappedAddress::InterruptEnableRegister => Ok(self.ir_handler.read_ie()),
         }
     }
 

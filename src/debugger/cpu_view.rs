@@ -20,7 +20,7 @@ pub fn show(state: &mut CpuState, ui: &mut egui::Ui) {
     });
 
     ui.horizontal_wrapped(|ui| {
-        ui.label("Halted:");
-        ui.checkbox(&mut state.halted, "");
+        ui.checkbox(&mut state.ime, "IME");
+        ui.checkbox(&mut state.halted, "Halted");
     });
 }

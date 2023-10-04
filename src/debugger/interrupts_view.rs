@@ -2,7 +2,6 @@ use crate::gbr::interrupts::InterruptHandlerState;
 
 pub fn show(ir_hander: &mut InterruptHandlerState, ui: &mut egui::Ui) {
     ui.heading("Interrupts");
-    ui.checkbox(&mut ir_hander.ime, "IME");
     ui.horizontal(|ui| {
         ui.label("Vblank: ");
         ui.checkbox(&mut ir_hander.vblank.enabled, "Enabled");
