@@ -133,7 +133,7 @@ impl Timer {
             } else {
                 self.counter += 1;
             }
-            self.cycles_elapsed_divider -= counts_per_cycles;
+            self.cycles_elapsed_counter -= counts_per_cycles;
         }
 
         was_reset
