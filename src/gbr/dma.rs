@@ -1,8 +1,8 @@
 use super::{
     mbc::MBC,
     memory_map::{
-        CART_RAM_START, CART_ROM_ACTIVE_BANK_END, CART_ROM_BANK0_START, OBJ_ATTRIBUTE_TABLE_SIZE,
-        OBJ_ATTRIBUTE_TABLE_START, VRAM_END, VRAM_START,
+        CART_RAM_END, CART_RAM_START, CART_ROM_ACTIVE_BANK_END, CART_ROM_BANK0_START,
+        OBJ_ATTRIBUTE_TABLE_SIZE, OBJ_ATTRIBUTE_TABLE_START, VRAM_END, VRAM_START,
     },
     oam::ObjAttributeMemory,
     ppu::PPU,
@@ -59,14 +59,18 @@ impl DMA {
     }
 
     pub fn write_reg(&mut self, src: u8) {
-        self.source_addr = (src as u16) << 8;
+        self.source_addr = (src as u16) << 7;
         self.started = true;
         self.curr_index = 0;
 
         match self.source_addr {
             CART_ROM_BANK0_START..=CART_ROM_ACTIVE_BANK_END => self.source_type = SourceType::Cart,
             VRAM_START..=VRAM_END => self.source_type = SourceType::Vram,
-            CART_RAM_START.. => self.source_type = SourceType::Cart,
+            CART_RAM_START..=CART_RAM_END => self.source_type = SourceType::Cart,
+            _ => {
+                log::warn!("Starting DMA from invalid addres {:#06X}", self.source_addr);
+                self.started = false;
+            }
         }
     }
 
