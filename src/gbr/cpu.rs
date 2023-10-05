@@ -420,7 +420,6 @@ impl CPU {
             if ir_handler.test(InterruptType::VBlank) {
                 ir_handler.clear(InterruptType::VBlank);
                 self.goto_interrupt(bus, VBLANK_IR_ADDRESS)?;
-                log::debug!("Handling VBLANK interrupt");
                 return Ok(true);
             }
 

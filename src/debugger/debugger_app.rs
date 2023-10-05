@@ -4,9 +4,7 @@ use std::time::{Duration, SystemTime};
 
 use flume::Receiver;
 
-use egui_tracing::EventCollector;
 use pixels::{Pixels, SurfaceTexture};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -27,19 +25,13 @@ pub enum EmuState {
     Error,
 }
 
-pub struct DebuggerApp {
-    collector: EventCollector,
-}
+pub struct DebuggerApp {}
 
 impl DebuggerApp {
     pub fn new() -> Self {
-        let collector = egui_tracing::EventCollector::default();
-        tracing_subscriber::registry()
-            .with(EnvFilter::from_default_env())
-            .with(collector.clone())
-            .init();
+        env_logger::init();
 
-        Self { collector }
+        Self {}
     }
 
     pub fn run(&self, game_boy: Arc<RwLock<GameBoy>>) -> Result<(), Box<dyn std::error::Error>> {
@@ -78,7 +70,6 @@ impl DebuggerApp {
         });
 
         let mut ui = Ui::new(
-            self.collector.clone(),
             gb_state,
             asm_state,
             cmd_sig,
