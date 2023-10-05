@@ -21,7 +21,9 @@ const CH3_OUTPUT_LEVEL_REG_ADDR: u16 = 0xFF1C;
 const CH3_PERIOD_LOW_REG_ADDR: u16 = 0xFF1D;
 const CH3_PERIOD_HIGH_AND_CTRL_REG_ADDR: u16 = 0xFF1E;
 
+const CH4_LENGTH_TIMER_REG_ADDR: u16 = 0xFF20;
 const CH4_ENVELOPE_REG_ADDR: u16 = 0xFF21;
+const CH4_FREQ_AND_RANDOM_REG_ADDR: u16 = 0xFF22;
 const CH4_CONTROL_REG_ADDR: u16 = 0xFF23;
 
 const VOLUME_CTRL_REG_ADDR: u16 = 0xFF24;
@@ -63,8 +65,9 @@ impl APU {
 
     pub fn read_reg(&self, addr: u16) -> Result<u8, GbError> {
         match addr {
+            OUTPUT_SELECT_REG_ADDR => Ok(self.sound_output_terminal_selection),
             _ => Err(GbError::IllegalOp(format!(
-                "Write to invalid APU reg {:#06X}",
+                "Read from invalid APU reg {:#06X}",
                 addr
             ))),
         }
@@ -86,7 +89,9 @@ impl APU {
             CH3_OUTPUT_LEVEL_REG_ADDR => self.ch3.write_output_level(value),
             CH3_PERIOD_LOW_REG_ADDR => self.ch3.write_period_low(value),
             CH3_PERIOD_HIGH_AND_CTRL_REG_ADDR => self.ch3.write_period_high_and_ctrl(value),
+            CH4_LENGTH_TIMER_REG_ADDR => self.ch4.write_length_timer(value),
             CH4_ENVELOPE_REG_ADDR => self.ch4.write_envelope(value),
+            CH4_FREQ_AND_RANDOM_REG_ADDR => self.ch4.write_freq_and_randomness(value),
             CH4_CONTROL_REG_ADDR => self.ch4.write_control(value),
             VOLUME_CTRL_REG_ADDR => self.sound_channel_volume_control = value,
             OUTPUT_SELECT_REG_ADDR => self.sound_output_terminal_selection = value,

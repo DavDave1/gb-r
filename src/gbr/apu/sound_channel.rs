@@ -249,6 +249,7 @@ impl Channel3 {
 
 #[derive(Default)]
 pub struct Channel4 {
+    length_timer: u8,
     envelope: Envelope,
     clock_shift: u8,
     clock_divider: u8,
@@ -263,5 +264,20 @@ impl Channel4 {
 
     pub fn write_control(&mut self, value: u8) {
         self.control.write(value);
+    }
+
+    pub fn write_length_timer(&mut self, value: u8) {
+        self.length_timer = value;
+    }
+
+    pub fn write_freq_and_randomness(&mut self, value: u8) {
+        self.clock_divider = value & 0b00000111;
+        self.lfsr_width = if value & 0b00001000 != 0 {
+            LfsrWidth::SevenBits
+        } else {
+            LfsrWidth::FifteenBits
+        };
+
+        self.clock_shift = (value & 0b11110000) >> 4;
     }
 }
