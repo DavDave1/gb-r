@@ -4,8 +4,8 @@ use super::{
     lcd_control_register::LcdControlRegister,
     palette::Palette,
     tile::{Tile, TILE_COLOR_ID},
-    Point, MODE_2_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_BLOCK1_START, TILE_BLOCK2_START,
-    TILE_DATA_SIZE,
+    Point, MODE_2_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, TILEMAP_BLOCK1_START, TILE_BLOCK1_START,
+    TILE_BLOCK2_START, TILE_DATA_SIZE,
 };
 
 #[derive(PartialEq)]
@@ -88,7 +88,7 @@ impl PixelProcessor {
 
         while delta_dots > 0 && !self.finished() {
             if self.curr_step == Step::GetTileIndex {
-                self.get_tile_index(ly, viewport, vram);
+                self.get_tile_index(lcd_ctrl, ly, viewport, vram);
                 delta_dots -= 2;
                 self.curr_step = Step::GetTileData;
             }
@@ -118,7 +118,13 @@ impl PixelProcessor {
         self.old_dots = (dots as i16 - delta_dots) as u16;
     }
 
-    fn get_tile_index(&mut self, ly: u8, viewport: &Point, vram: &[u8]) {
+    fn get_tile_index(
+        &mut self,
+        lcd_ctrl: &LcdControlRegister,
+        ly: u8,
+        viewport: &Point,
+        vram: &[u8],
+    ) {
         self.scroll_x |= viewport.x & 0b11111000;
         self.scroll_y = viewport.y;
 
@@ -133,16 +139,22 @@ impl PixelProcessor {
         self.curr_tile_line = (tile_y % 8) as u8;
         let tilemap_addr = tile_y / 8 * 32 + tile_x / 8;
 
-        self.curr_tile_index = vram[TILEMAP_BLOCK0_START as usize + tilemap_addr as usize];
+        let tile_block_addr = if lcd_ctrl.bg_tile_map_area_sel {
+            TILEMAP_BLOCK1_START
+        } else {
+            TILEMAP_BLOCK0_START
+        };
+
+        self.curr_tile_index = vram[tile_block_addr as usize + tilemap_addr as usize];
     }
 
     fn get_tile_data(&mut self, lcd_ctrl: &LcdControlRegister, vram: &[u8]) {
         let tile_block_addr = if lcd_ctrl.bg_and_window_tile_area_sel {
             0
         } else if self.curr_tile_index < 128 {
-            TILE_BLOCK1_START as usize
-        } else {
             TILE_BLOCK2_START as usize
+        } else {
+            TILE_BLOCK1_START as usize
         };
 
         let tile_addr = tile_block_addr
