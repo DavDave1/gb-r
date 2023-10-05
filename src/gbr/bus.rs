@@ -114,7 +114,11 @@ impl BusAccess for Bus {
                 let len = Instruction::peek_len(self.wram[local_addr as usize])? as usize;
                 Instruction::decode(&self.wram[local_addr as usize..local_addr as usize + len])
             }
-
+            MappedAddress::HighRam(addr) => {
+                let local_addr = addr - HRAM_START;
+                let len = Instruction::peek_len(self.hram[local_addr as usize])? as usize;
+                Instruction::decode(&self.hram[local_addr as usize..local_addr as usize + len])
+            }
             _ => Err(GbError::AddrOutOfBounds(addr)),
         }
     }
