@@ -20,6 +20,8 @@ use crate::gbr::{
     GbError,
 };
 
+use super::interrupts::{InterruptHandler, InterruptType};
+
 // rlative to VRAM base addr
 const TILE_BLOCK0_START: u16 = 0x0000;
 const TILE_BLOCK0_END: u16 = 0x07FF;
@@ -133,7 +135,11 @@ impl PPU {
         self.pixel_processor = PixelProcessor::new();
     }
 
-    pub fn step(&mut self, cpu_cycles: u8) -> Result<bool, GbError> {
+    pub fn step(
+        &mut self,
+        ir_handler: &mut InterruptHandler,
+        cpu_cycles: u8,
+    ) -> Result<bool, GbError> {
         if !self.lcd_control.display_enable {
             return Ok(false);
         }
@@ -141,16 +147,16 @@ impl PPU {
         self.dots += cpu_cycles as u16;
 
         if self.dots > DOTS_PER_LINE {
-            if self.lcd_status.mode != ScreenMode::HBlank
-                && self.lcd_status.mode != ScreenMode::VBlank
+            if self.lcd_status.mode.get() != ScreenMode::HBlank
+                && self.lcd_status.mode.get() != ScreenMode::VBlank
             {
                 return Err(GbError::IllegalOp(format!(
                     "unexpected mode {} during hblank",
-                    self.lcd_status.mode
+                    self.lcd_status.mode.get()
                 )));
             }
             self.ly += 1;
-            self.lcd_status.lyc_equals_ly = self.lcd_status.lyc_check_enable && self.lyc == self.ly;
+            self.lcd_status.lyc_equals_ly.set(self.lyc == self.ly);
             self.dots -= DOTS_PER_LINE;
         }
 
@@ -160,10 +166,10 @@ impl PPU {
             self.ly = 0;
             vblank_ev = true;
         } else if self.ly >= VBLANK_LINE {
-            self.lcd_status.mode = ScreenMode::VBlank;
+            self.lcd_status.mode.set(ScreenMode::VBlank);
         } else if self.dots <= MODE_2_DOTS {
-            self.lcd_status.mode = ScreenMode::SreachingOAM;
-        } else if self.lcd_status.mode == ScreenMode::SreachingOAM {
+            self.lcd_status.mode.set(ScreenMode::SreachingOAM);
+        } else if self.lcd_status.mode.get() == ScreenMode::SreachingOAM {
             self.pixel_processor.start(
                 self.ly,
                 self.dots,
@@ -172,7 +178,7 @@ impl PPU {
                 &self.vram,
                 &self.bg_palette,
             );
-            self.lcd_status.mode = ScreenMode::TransferringData;
+            self.lcd_status.mode.set(ScreenMode::TransferringData);
         } else if !self.pixel_processor.finished() {
             self.pixel_processor.process(
                 self.ly,
@@ -186,8 +192,10 @@ impl PPU {
                 log::error!("mode 3 out of bounds {}", self.dots);
             }
         } else {
-            self.lcd_status.mode = ScreenMode::HBlank;
+            self.lcd_status.mode.set(ScreenMode::HBlank);
         }
+
+        self.set_interrupts(ir_handler);
 
         Ok(vblank_ev)
     }
@@ -222,7 +230,7 @@ impl PPU {
     pub fn read_reg(&self, addr: u16) -> Result<u8, GbError> {
         match addr {
             LCD_CTRL_REG_ADDR => Ok(self.lcd_control.into()),
-            LCD_STAT_REG_ADDR => Ok(self.lcd_status.into()),
+            LCD_STAT_REG_ADDR => Ok(self.lcd_status.read()),
             VIEWPORT_Y_REG_ADDR => Ok(self.viewport.y),
             VIEWPORT_X_REG_ADDR => Ok(self.viewport.x),
             LY_REG_ADDR => Ok(self.ly),
@@ -242,7 +250,7 @@ impl PPU {
     pub fn write_reg(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
         match addr {
             LCD_CTRL_REG_ADDR => self.lcd_control = value.into(),
-            LCD_STAT_REG_ADDR => self.lcd_status = value.into(),
+            LCD_STAT_REG_ADDR => self.lcd_status.write(value),
             VIEWPORT_Y_REG_ADDR => self.viewport.y = value,
             VIEWPORT_X_REG_ADDR => self.viewport.x = value,
             LY_REG_ADDR => return Err(GbError::IllegalOp("Cannot write to LY register".into())),
@@ -276,20 +284,25 @@ impl PPU {
         Ok(())
     }
 
-    fn update_tile_list(&mut self) {
-        PPU::parse_tiles(
-            &self.vram,
-            TILE_BLOCK0_START as usize,
-            TILE_BLOCK2_END as usize,
-            &mut self.tiles_list,
-        );
+    fn set_interrupts(&mut self, ir_handler: &mut InterruptHandler) {
+        if self.lcd_status.mode.changed_to(ScreenMode::VBlank) {
+            ir_handler.set(InterruptType::VBlank);
+        }
+
+        if self.lcd_status.is_mode_0_ir()
+            || self.lcd_status.is_mode_1_ir()
+            || self.lcd_status.is_mode_2_ir()
+            || self.lcd_status.is_lyc_ir()
+        {
+            ir_handler.set(InterruptType::LcdStat)
+        }
     }
 
-    fn parse_tiles(vram: &[u8], start_addr: usize, end_addr: usize, dst: &mut [Tile]) {
+    fn update_tile_list(&mut self) {
         let mut tile_index = 0;
-        let mut addr = start_addr;
-        while addr <= end_addr {
-            dst[tile_index] = Tile::from_data(&vram[addr..addr + TILE_DATA_SIZE]);
+        let mut addr = TILE_BLOCK0_START as usize;
+        while addr <= TILE_BLOCK2_END as usize {
+            self.tiles_list[tile_index] = Tile::from_data(&self.vram[addr..addr + TILE_DATA_SIZE]);
             tile_index += 1;
             addr += TILE_DATA_SIZE;
         }

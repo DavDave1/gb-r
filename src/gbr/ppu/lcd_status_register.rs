@@ -43,37 +43,74 @@ impl Display for ScreenMode {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
-pub struct LcsStatusRegister {
-    pub lyc_check_enable: bool,
-    pub lyc_equals_ly: bool,
-    pub mode_2_check_enable: bool,
-    pub mode_1_check_enable: bool,
-    pub mode_0_check_enable: bool,
-    pub mode: ScreenMode,
+#[derive(Default, Clone, Copy, Debug)]
+pub struct Signal<Type: PartialEq + Default + Copy> {
+    val: Type,
+    old_val: Type,
 }
 
-impl From<u8> for LcsStatusRegister {
-    fn from(value: u8) -> Self {
-        LcsStatusRegister {
-            lyc_check_enable: value & 0b01000000 != 0,
-            lyc_equals_ly: value & 0b00100000 != 0,
-            mode_2_check_enable: value & 0b00010000 != 0,
-            mode_1_check_enable: value & 0b00001000 != 0,
-            mode_0_check_enable: value & 0b00000100 != 0,
-            mode: (value & 0b00000011).into(),
-        }
+impl<Type: PartialEq + Default + Copy> Signal<Type> {
+    pub fn set(&mut self, v: Type) {
+        self.old_val = self.val;
+        self.val = v;
+    }
+
+    pub fn get(&self) -> Type {
+        self.val
+    }
+
+    pub fn changed(&self) -> bool {
+        self.val != self.old_val
+    }
+
+    pub fn changed_to(&self, to: Type) -> bool {
+        self.changed() && self.val == to
     }
 }
 
-impl From<LcsStatusRegister> for u8 {
-    fn from(value: LcsStatusRegister) -> Self {
-        (value.lyc_check_enable as u8) << 6
-            | (value.lyc_equals_ly as u8) << 5
-            | (value.mode_2_check_enable as u8) << 4
-            | (value.mode_1_check_enable as u8) << 3
-            | (value.mode_0_check_enable as u8) << 2
-            | value.mode as u8
+#[derive(Default, Debug, Clone, Copy)]
+pub struct LcsStatusRegister {
+    pub lyc_ir_enable: bool,
+    pub mode_2_ir_enable: bool,
+    pub mode_1_ir_enable: bool,
+    pub mode_0_ir_enable: bool,
+    pub lyc_equals_ly: Signal<bool>,
+    pub mode: Signal<ScreenMode>,
+}
+
+impl LcsStatusRegister {
+    pub fn read(&self) -> u8 {
+        (self.lyc_ir_enable as u8) << 6
+            | (self.mode_2_ir_enable as u8) << 5
+            | (self.mode_1_ir_enable as u8) << 4
+            | (self.mode_0_ir_enable as u8) << 3
+            | (self.lyc_equals_ly.get() as u8) << 2
+            | self.mode.get() as u8
+    }
+
+    pub fn write(&mut self, v: u8) {
+        self.lyc_ir_enable = v & 0b01000000 != 0;
+        self.mode_2_ir_enable = v & 0b00100000 != 0;
+        self.mode_1_ir_enable = v & 0b00010000 != 0;
+        self.mode_0_ir_enable = v & 0b00001000 != 0;
+        self.lyc_equals_ly.set(v & 0b00000100 != 0);
+        self.mode.set((v & 0b00000011).into());
+    }
+
+    pub fn is_mode_0_ir(&self) -> bool {
+        self.mode_0_ir_enable && self.mode.changed_to(ScreenMode::SreachingOAM)
+    }
+
+    pub fn is_mode_1_ir(&self) -> bool {
+        self.mode_1_ir_enable && self.mode.changed_to(ScreenMode::TransferringData)
+    }
+
+    pub fn is_mode_2_ir(&self) -> bool {
+        self.mode_2_ir_enable && self.mode.changed_to(ScreenMode::HBlank)
+    }
+
+    pub fn is_lyc_ir(&self) -> bool {
+        self.lyc_ir_enable && self.lyc_equals_ly.changed()
     }
 }
 
@@ -87,19 +124,19 @@ fn flag_to_str(flag: bool) -> &'static str {
 
 impl Display for LcsStatusRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Mode: {}\n", self.mode)?;
+        write!(f, "Mode: {}\n", self.mode.get())?;
         write!(
             f,
             "LYC: enabled {} equals {}\n",
-            flag_to_str(self.lyc_check_enable),
-            flag_to_str(self.lyc_equals_ly)
+            flag_to_str(self.lyc_ir_enable),
+            flag_to_str(self.lyc_equals_ly.get())
         )?;
         write!(
             f,
             "Interrupts: mode2 {} mode1 {} mode0 {}",
-            flag_to_str(self.mode_2_check_enable),
-            flag_to_str(self.mode_2_check_enable),
-            flag_to_str(self.mode_1_check_enable)
+            flag_to_str(self.mode_2_ir_enable),
+            flag_to_str(self.mode_1_ir_enable),
+            flag_to_str(self.mode_0_ir_enable)
         )
     }
 }
