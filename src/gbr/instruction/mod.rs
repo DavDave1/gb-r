@@ -900,7 +900,7 @@ impl Display for Instruction {
             StoreSP(addr) => write!(f, "Store SP {}", addr),
             Push(reg) => write!(f, "Push {}", reg),
             Pop(reg) => write!(f, "Pop {}", reg),
-            Call(addr, cond) => write!(f, "Call {}, {}", cond, addr),
+            Call(addr, cond) => write!(f, "Call {}, {:#06X}", cond, addr),
             Ret(cond) => write!(f, "Ret {}", cond),
             RetI => write!(f, "RetI"),
         }

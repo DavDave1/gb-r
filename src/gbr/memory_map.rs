@@ -55,6 +55,7 @@ pub const HRAM_START: u16 = 0xFF80;
 const HRAM_END: u16 = 0xFFFE;
 pub const HRAM_SIZE: usize = (HRAM_END - HRAM_START + 1) as usize;
 
+#[derive(Debug, PartialEq)]
 pub enum MappedAddress {
     CartRom(u16),
     VideoRam(u16),
@@ -98,5 +99,19 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
         IO_REGISTERS_START..=IO_REGISTERS_END => Ok(MappedAddress::IORegisters(addr)),
         HRAM_START..=HRAM_END => Ok(MappedAddress::HighRam(addr)),
         INTERRUPTS_ENABLE_REGISTER => Ok(MappedAddress::InterruptEnableRegister),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::gbr::memory_map::MappedAddress;
+
+    use super::map_address;
+
+    #[test]
+    fn wram_mapping() {
+        let mapped = map_address(0xC000).unwrap();
+
+        assert_eq!(mapped, MappedAddress::WorkRam(0xC000));
     }
 }

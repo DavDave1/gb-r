@@ -102,7 +102,7 @@ impl MBC {
                         rel_addr,
                         self.active_rom_bank
                     );
-                    return Err(GbError::AddrOutOfBounds(addr));
+                    return Err(GbError::MbcAddrOutOfBounds(addr));
                 }
                 Ok(self.rom[rel_addr])
             }
@@ -114,7 +114,8 @@ impl MBC {
                 };
                 Ok(val)
             }
-            _ => Err(GbError::AddrOutOfBounds(addr)),
+            _ => panic!("Read byte from {:#06X}", addr),
+            _ => Err(GbError::MbcAddrOutOfBounds(addr)),
         }
     }
 
@@ -157,7 +158,8 @@ impl MBC {
                     self.ram[self.ram_relative_addr(addr)] = byte;
                 }
             }
-            _ => return Err(GbError::AddrOutOfBounds(addr)),
+            _ => panic!("write byte to {:#06X}", addr),
+            _ => return Err(GbError::MbcAddrOutOfBounds(addr)),
         }
 
         Ok(())
@@ -179,7 +181,8 @@ impl MBC {
                 };
                 Ok(val)
             }
-            _ => Err(GbError::AddrOutOfBounds(addr)),
+            _ => panic!("Read word from {:#06X}", addr),
+            _ => Err(GbError::MbcAddrOutOfBounds(addr)),
         }
     }
 

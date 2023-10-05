@@ -29,6 +29,8 @@ pub enum GbError {
     IllegalOp(String),
     #[error("Address {0:#06X} out of bounds")]
     AddrOutOfBounds(u16),
+    #[error("MBC Address {0:#06X} out of bounds")]
+    MbcAddrOutOfBounds(u16),
     #[error("Header parsing: {0}")]
     HeaderParsing(String),
 }
