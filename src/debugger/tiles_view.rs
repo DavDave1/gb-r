@@ -22,12 +22,10 @@ fn create_image(tiles: &TileList, palette: &Palette) -> ColorImage {
 
         for r in 0..TILE_HEIGHT as usize {
             for c in 0..TILE_WIDTH as usize {
-                let index = r * TILE_WIDTH as usize + c;
-
                 tile_region.put_pixel(
                     c as u32,
                     r as u32,
-                    image::Rgba(palette.rgba(tile.pixels[index]).rgba),
+                    image::Rgba(palette.rgba(tile.pixels[r][c]).rgba),
                 );
             }
         }

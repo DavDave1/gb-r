@@ -13,14 +13,17 @@ use self::{
     palette::Palette,
     pixel_processor::PixelProcessor,
     rgba::Rgba,
-    tile::Tile,
+    tile::{Tile, TileData},
 };
 use crate::gbr::{
     memory_map::{VRAM_SIZE, VRAM_START},
     GbError,
 };
 
-use super::interrupts::{InterruptHandler, InterruptType};
+use super::{
+    interrupts::{InterruptHandler, InterruptType},
+    oam::ObjAttributeMemory,
+};
 
 // rlative to VRAM base addr
 const TILE_BLOCK0_START: u16 = 0x0000;
@@ -96,7 +99,7 @@ pub struct PPU {
     lyc: u8,
     viewport: Point,
     win_pos: Point,
-    tiles_list: Vec<Tile>,
+    tiles: TileData,
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
     dots: u16,
     pixel_processor: PixelProcessor,
@@ -115,7 +118,7 @@ impl PPU {
             lyc: 0,
             viewport: Point::default(),
             win_pos: Point::default(),
-            tiles_list: vec![Tile::default(); 3 * TILE_BLOCK_SIZE],
+            tiles: TileData::new(),
             render_ch: flume::bounded(1),
             dots: 0,
             pixel_processor: PixelProcessor::new(),
@@ -131,7 +134,7 @@ impl PPU {
         self.lyc = 0;
         self.viewport = Point::default();
         self.win_pos = Point::default();
-        self.tiles_list.fill(Tile::default());
+        self.tiles.clear();
         self.dots = 0;
         self.pixel_processor = PixelProcessor::new();
     }
@@ -139,6 +142,7 @@ impl PPU {
     pub fn step(
         &mut self,
         ir_handler: &mut InterruptHandler,
+        oam: &ObjAttributeMemory,
         cpu_cycles: u8,
     ) -> Result<bool, GbError> {
         if !self.lcd_control.display_enable {
@@ -172,11 +176,13 @@ impl PPU {
             self.lcd_status.mode.set(ScreenMode::SreachingOAM);
         } else if self.lcd_status.mode.get() == ScreenMode::SreachingOAM {
             self.pixel_processor.start(
+                oam,
                 self.ly,
                 self.dots,
                 &self.viewport,
                 &self.lcd_control,
                 &self.vram,
+                &self.tiles,
                 &self.bg_palette,
             );
             self.lcd_status.mode.set(ScreenMode::TransferringData);
@@ -187,6 +193,7 @@ impl PPU {
                 &self.viewport,
                 &self.lcd_control,
                 &self.vram,
+                &self.tiles,
                 &self.bg_palette,
             );
             if self.dots > MODE_3_DOTS_MAX {
@@ -220,9 +227,24 @@ impl PPU {
     }
 
     pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
-        if !self.lcd_control.display_enable {
-            self.vram[(addr - VRAM_START) as usize] = value;
-            self.update_tile_list();
+        if self.lcd_control.display_enable {
+            return Ok(());
+        }
+
+        let local_addr = (addr - VRAM_START) as usize;
+
+        self.vram[local_addr] = value;
+
+        if local_addr <= TILE_BLOCK2_END as usize {
+            let is_lsb = local_addr % 2 == 0;
+
+            if is_lsb {
+                self.tiles
+                    .write_line(local_addr, self.vram[local_addr + 1], value);
+            } else {
+                self.tiles
+                    .write_line(local_addr, value, self.vram[local_addr - 1]);
+            }
         }
 
         Ok(())
@@ -299,16 +321,6 @@ impl PPU {
         }
     }
 
-    fn update_tile_list(&mut self) {
-        let mut tile_index = 0;
-        let mut addr = TILE_BLOCK0_START as usize;
-        while addr <= TILE_BLOCK2_END as usize {
-            self.tiles_list[tile_index] = Tile::from_data(&self.vram[addr..addr + TILE_DATA_SIZE]);
-            tile_index += 1;
-            addr += TILE_DATA_SIZE;
-        }
-    }
-
     pub fn state(&self) -> PpuState {
         PpuState {
             lcd_control: self.lcd_control,
@@ -320,7 +332,7 @@ impl PPU {
             lyc: self.lyc,
             viewport: self.viewport.clone(),
             win_pos: self.win_pos.clone(),
-            tiles_list: self.tiles_list.clone(),
+            tiles_list: self.tiles.list().clone(),
         }
     }
 

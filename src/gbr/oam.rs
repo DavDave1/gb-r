@@ -8,7 +8,7 @@ const OBJ_ATTR_SIZE: usize = 4; // bytes
 const OBJ_ATTR_COUNT: usize = OBJ_ATTRIBUTE_TABLE_SIZE / OBJ_ATTR_SIZE;
 
 #[derive(Default, Clone)]
-struct ObjAttribute {
+pub struct ObjAttribute {
     position: Point,
     tile_index: u8,
     bg_win_prio: bool,
@@ -34,6 +34,10 @@ impl ObjAttribute {
 
         Ok(())
     }
+
+    pub fn position(&self) -> &Point {
+        &self.position
+    }
 }
 
 pub struct ObjAttributeMemory {
@@ -53,5 +57,24 @@ impl ObjAttributeMemory {
         let attr_id = rel_addr % OBJ_ATTR_SIZE;
 
         self.attributes[obj_index].write_attr(attr_id, value)
+    }
+
+    pub fn get_objs_at_line(&self, ly: u8) -> Vec<ObjAttribute> {
+        let mut objs = vec![];
+        objs.reserve(10);
+
+        for attr in self.attributes.iter() {
+            if attr.position().y < ly && attr.position().y + 8 > ly {
+                objs.push(attr.clone());
+            }
+
+            if objs.len() == 10 {
+                break;
+            }
+        }
+
+        objs.sort_by(|l, r| l.position().x.partial_cmp(&r.position().x).unwrap());
+
+        objs
     }
 }
