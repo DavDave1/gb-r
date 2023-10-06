@@ -32,6 +32,9 @@ const NOT_USABLE_RAM_END: u16 = 0xFEFF;
 pub const IO_REGISTERS_START: u16 = 0xFF00;
 const IO_REGISTERS_END: u16 = 0xFF7F;
 
+pub const SERIAL_REGISTERS_START: u16 = 0xFF01;
+const SERIAL_REGISTERS_END: u16 = 0xFF02;
+
 pub const TIMER_REGISTERS_START: u16 = 0xFF04;
 pub const TIMER_REGISTERS_END: u16 = 0xFF07;
 
@@ -69,6 +72,7 @@ pub enum MappedAddress {
     PpuRegisters(u16),
     DmaRegister,
     BootRomLockRegister,
+    SerialRegisters,
     IORegisters(u16),
     HighRam(u16),
     InterruptFlagRegister,
@@ -89,6 +93,7 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
             Ok(MappedAddress::ObjectAttributeTable(addr))
         }
         NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => Ok(MappedAddress::NotUsable(addr)),
+        SERIAL_REGISTERS_START..=SERIAL_REGISTERS_END => Ok(MappedAddress::SerialRegisters),
         TIMER_REGISTERS_START..=TIMER_REGISTERS_END => Ok(MappedAddress::TimerRegisters(addr)),
         APU_REGISTERS_START..=APU_REGISTERS_END => Ok(MappedAddress::ApuRegisters(addr)),
         PPU_REGISTERS_LOW_START..=PPU_REGISTERS_LOW_END => Ok(MappedAddress::PpuRegisters(addr)),

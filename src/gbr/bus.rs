@@ -4,7 +4,7 @@ use byteorder::{ByteOrder, LittleEndian};
 
 use super::{
     apu::APU, dma::DMA, interrupts::InterruptHandler, io_registers::IORegisters, mbc::MBC,
-    memory_map::*, oam::ObjAttributeMemory, ppu::PPU, timer::Timer, GbError,
+    memory_map::*, oam::ObjAttributeMemory, ppu::PPU, serial::Serial, timer::Timer, GbError,
 };
 
 #[cfg(test)]
@@ -33,6 +33,7 @@ pub struct Bus {
     timer: Timer,
     mbc: MBC,
     dma: DMA,
+    serial: Serial,
 }
 
 impl Bus {
@@ -62,12 +63,14 @@ impl Bus {
             timer: Timer::default(),
             mbc,
             dma: DMA::new(),
+            serial: Serial::default(),
         }
     }
 
     pub fn step(&mut self, cycles: u8) -> Result<bool, GbError> {
         self.dma.step(&self.ppu, &self.mbc, &mut self.oam, cycles)?;
         self.timer.step(cycles, &mut self.ir_handler);
+        self.serial.step(cycles, &mut self.ir_handler);
         self.apu.step(cycles)?;
         self.ppu.step(&mut self.ir_handler, &self.oam, cycles)
     }
@@ -110,6 +113,7 @@ impl BusAccess for Bus {
                 log::warn!("Reading byte from unusable addr {:#06X}", addr);
                 Ok(0xFF)
             }
+            MappedAddress::SerialRegisters => self.serial.read(addr),
             MappedAddress::TimerRegisters(addr) => self.timer.read_reg(addr),
             MappedAddress::ApuRegisters(addr) => self.apu.read_reg(addr),
             MappedAddress::PpuRegisters(addr) => self.ppu.read_reg(addr),
@@ -138,6 +142,7 @@ impl BusAccess for Bus {
             MappedAddress::NotUsable(addr) => {
                 log::warn!("Writing byte {:#04X} to unusable addr {:#06X}", value, addr);
             }
+            MappedAddress::SerialRegisters => self.serial.write(addr, value)?,
             MappedAddress::TimerRegisters(addr) => self.timer.write_reg(addr, value)?,
             MappedAddress::ApuRegisters(addr) => self.apu.write_reg(addr, value)?,
             MappedAddress::PpuRegisters(addr) => self.ppu.write_reg(addr, value)?,
@@ -172,6 +177,9 @@ impl BusAccess for Bus {
             MappedAddress::NotUsable(addr) => {
                 log::warn!("Reading word from unusable addr {:#06X}", addr);
                 Ok(0xFFFF)
+            }
+            MappedAddress::SerialRegisters => {
+                Err(GbError::IllegalOp("read word from Serial registers".into()))
             }
             MappedAddress::TimerRegisters(_addr) => {
                 Err(GbError::IllegalOp("read word from Timer registers".into()))

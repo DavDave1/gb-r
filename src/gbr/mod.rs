@@ -14,6 +14,7 @@ pub mod timer;
 
 mod alu;
 mod oam;
+mod serial;
 
 use thiserror::Error;
 
