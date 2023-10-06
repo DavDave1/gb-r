@@ -2,7 +2,6 @@ pub mod opcode;
 
 use std::fmt::Display;
 
-use byteorder::{ByteOrder, LittleEndian};
 use enum_primitive::FromPrimitive;
 
 use super::GbError;
@@ -308,7 +307,7 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    pub fn decode(memory: &[u8]) -> Result<Self, GbError> {
+    pub fn decode(opcode: Opcode, byte: Option<u8>, word: Option<u16>) -> Result<Self, GbError> {
         use ArithmeticType::*;
         use DoubleRegType::*;
         use GenericRegType::*;
@@ -317,9 +316,6 @@ impl Instruction {
         use SingleRegType::*;
         use Source::*;
 
-        type LE = LittleEndian;
-
-        let opcode = Opcode::from_u8(memory[0]).ok_or(GbError::UnknownInstruction(memory[0]))?;
         let mut cb_opcode = None;
         let instr = match opcode {
             Opcode::Nop => Nop,
@@ -366,12 +362,12 @@ impl Instruction {
             Opcode::AddAH => Arithmetic(Add(A, Operand::Reg(H))),
             Opcode::AddAL => Arithmetic(Add(A, Operand::Reg(L))),
             Opcode::AddAHL => Arithmetic(Add(A, Operand::RegAddr(HL))),
-            Opcode::AddAd8 => Arithmetic(Add(A, Operand::Imm(memory[1]))),
+            Opcode::AddAd8 => Arithmetic(Add(A, Operand::Imm(byte.unwrap()))),
             Opcode::AddHLBC => Arithmetic(Add16(HL, BC)),
             Opcode::AddHLDE => Arithmetic(Add16(HL, DE)),
             Opcode::AddHLHL => Arithmetic(Add16(HL, HL)),
             Opcode::AddHLSP => Arithmetic(Add16(HL, SP)),
-            Opcode::AddSPs8 => Arithmetic(AddSP(memory[1] as i8)),
+            Opcode::AddSPs8 => Arithmetic(AddSP(byte.unwrap() as i8)),
             Opcode::AdcAA => Arithmetic(Adc(A, Operand::Reg(A))),
             Opcode::AdcAB => Arithmetic(Adc(A, Operand::Reg(B))),
             Opcode::AdcAC => Arithmetic(Adc(A, Operand::Reg(C))),
@@ -380,7 +376,7 @@ impl Instruction {
             Opcode::AdcAH => Arithmetic(Adc(A, Operand::Reg(H))),
             Opcode::AdcAL => Arithmetic(Adc(A, Operand::Reg(L))),
             Opcode::AdcAHL => Arithmetic(Adc(A, Operand::RegAddr(HL))),
-            Opcode::AdcAd8 => Arithmetic(Adc(A, Operand::Imm(memory[1]))),
+            Opcode::AdcAd8 => Arithmetic(Adc(A, Operand::Imm(byte.unwrap()))),
             Opcode::SubAA => Arithmetic(Sub(A, Operand::Reg(A))),
             Opcode::SubAB => Arithmetic(Sub(A, Operand::Reg(B))),
             Opcode::SubAC => Arithmetic(Sub(A, Operand::Reg(C))),
@@ -389,7 +385,7 @@ impl Instruction {
             Opcode::SubAH => Arithmetic(Sub(A, Operand::Reg(H))),
             Opcode::SubAL => Arithmetic(Sub(A, Operand::Reg(L))),
             Opcode::SubAHL => Arithmetic(Sub(A, Operand::RegAddr(HL))),
-            Opcode::SubAd8 => Arithmetic(Sub(A, Operand::Imm(memory[1]))),
+            Opcode::SubAd8 => Arithmetic(Sub(A, Operand::Imm(byte.unwrap()))),
             Opcode::SbcAA => Arithmetic(Sbc(A, Operand::Reg(A))),
             Opcode::SbcAB => Arithmetic(Sbc(A, Operand::Reg(B))),
             Opcode::SbcAC => Arithmetic(Sbc(A, Operand::Reg(C))),
@@ -398,7 +394,7 @@ impl Instruction {
             Opcode::SbcAH => Arithmetic(Sbc(A, Operand::Reg(H))),
             Opcode::SbcAL => Arithmetic(Sbc(A, Operand::Reg(L))),
             Opcode::SbcAHL => Arithmetic(Sbc(A, Operand::RegAddr(HL))),
-            Opcode::SbcAd8 => Arithmetic(Sbc(A, Operand::Imm(memory[1]))),
+            Opcode::SbcAd8 => Arithmetic(Sbc(A, Operand::Imm(byte.unwrap()))),
             Opcode::AndA => Arithmetic(And(A, Operand::Reg(A))),
             Opcode::AndB => Arithmetic(And(A, Operand::Reg(B))),
             Opcode::AndC => Arithmetic(And(A, Operand::Reg(C))),
@@ -407,7 +403,7 @@ impl Instruction {
             Opcode::AndH => Arithmetic(And(A, Operand::Reg(H))),
             Opcode::AndL => Arithmetic(And(A, Operand::Reg(L))),
             Opcode::AndHL => Arithmetic(And(A, Operand::RegAddr(HL))),
-            Opcode::Andd8 => Arithmetic(And(A, Operand::Imm(memory[1]))),
+            Opcode::Andd8 => Arithmetic(And(A, Operand::Imm(byte.unwrap()))),
             Opcode::OrA => Arithmetic(Or(A, Operand::Reg(A))),
             Opcode::OrB => Arithmetic(Or(A, Operand::Reg(B))),
             Opcode::OrC => Arithmetic(Or(A, Operand::Reg(C))),
@@ -416,7 +412,7 @@ impl Instruction {
             Opcode::OrH => Arithmetic(Or(A, Operand::Reg(H))),
             Opcode::OrL => Arithmetic(Or(A, Operand::Reg(L))),
             Opcode::OrHL => Arithmetic(Or(A, Operand::RegAddr(HL))),
-            Opcode::Ord8 => Arithmetic(Or(A, Operand::Imm(memory[1]))),
+            Opcode::Ord8 => Arithmetic(Or(A, Operand::Imm(byte.unwrap()))),
             Opcode::XorA => Arithmetic(Xor(A, Operand::Reg(A))),
             Opcode::XorB => Arithmetic(Xor(A, Operand::Reg(B))),
             Opcode::XorC => Arithmetic(Xor(A, Operand::Reg(C))),
@@ -425,7 +421,7 @@ impl Instruction {
             Opcode::XorH => Arithmetic(Xor(A, Operand::Reg(H))),
             Opcode::XorL => Arithmetic(Xor(A, Operand::Reg(L))),
             Opcode::XorHL => Arithmetic(Xor(A, Operand::RegAddr(HL))),
-            Opcode::Xord8 => Arithmetic(Xor(A, Operand::Imm(memory[1]))),
+            Opcode::Xord8 => Arithmetic(Xor(A, Operand::Imm(byte.unwrap()))),
             Opcode::Cpl => Arithmetic(Cpl(A)),
             Opcode::CpA => Arithmetic(Cmp(A, Operand::Reg(A))),
             Opcode::CpB => Arithmetic(Cmp(A, Operand::Reg(B))),
@@ -434,26 +430,26 @@ impl Instruction {
             Opcode::CpE => Arithmetic(Cmp(A, Operand::Reg(E))),
             Opcode::CpH => Arithmetic(Cmp(A, Operand::Reg(H))),
             Opcode::CpL => Arithmetic(Cmp(A, Operand::Reg(L))),
-            Opcode::Cpd8 => Arithmetic(Cmp(A, Operand::Imm(memory[1]))),
+            Opcode::Cpd8 => Arithmetic(Cmp(A, Operand::Imm(byte.unwrap()))),
             Opcode::CpHL => Arithmetic(Cmp(A, Operand::RegAddr(HL))),
-            Opcode::Jr => Jump(Always, JumpType::Offset(memory[1] as i8)),
-            Opcode::JrZ => Jump(Zero, JumpType::Offset(memory[1] as i8)),
-            Opcode::JrNZ => Jump(NotZero, JumpType::Offset(memory[1] as i8)),
-            Opcode::JrC => Jump(Carry, JumpType::Offset(memory[1] as i8)),
-            Opcode::JrNC => Jump(NotCarry, JumpType::Offset(memory[1] as i8)),
-            Opcode::Jp => Jump(Always, JumpType::Addr(LE::read_u16(&memory[1..3]))),
-            Opcode::JpZ => Jump(Zero, JumpType::Addr(LE::read_u16(&memory[1..3]))),
-            Opcode::JpNZ => Jump(NotZero, JumpType::Addr(LE::read_u16(&memory[1..3]))),
-            Opcode::JpC => Jump(Carry, JumpType::Addr(LE::read_u16(&memory[1..3]))),
-            Opcode::JpNC => Jump(NotCarry, JumpType::Addr(LE::read_u16(&memory[1..3]))),
+            Opcode::Jr => Jump(Always, JumpType::Offset(byte.unwrap() as i8)),
+            Opcode::JrZ => Jump(Zero, JumpType::Offset(byte.unwrap() as i8)),
+            Opcode::JrNZ => Jump(NotZero, JumpType::Offset(byte.unwrap() as i8)),
+            Opcode::JrC => Jump(Carry, JumpType::Offset(byte.unwrap() as i8)),
+            Opcode::JrNC => Jump(NotCarry, JumpType::Offset(byte.unwrap() as i8)),
+            Opcode::Jp => Jump(Always, JumpType::Addr(word.unwrap())),
+            Opcode::JpZ => Jump(Zero, JumpType::Addr(word.unwrap())),
+            Opcode::JpNZ => Jump(NotZero, JumpType::Addr(word.unwrap())),
+            Opcode::JpC => Jump(Carry, JumpType::Addr(word.unwrap())),
+            Opcode::JpNC => Jump(NotCarry, JumpType::Addr(word.unwrap())),
             Opcode::JpHL => Jump(Always, JumpType::RegAddr(HL)),
-            Opcode::LdAd8 => Load(Single(A), Imm8(memory[1])),
-            Opcode::LdBd8 => Load(Single(B), Imm8(memory[1])),
-            Opcode::LdCd8 => Load(Single(C), Imm8(memory[1])),
-            Opcode::LdDd8 => Load(Single(D), Imm8(memory[1])),
-            Opcode::LdEd8 => Load(Single(E), Imm8(memory[1])),
-            Opcode::LdHd8 => Load(Single(H), Imm8(memory[1])),
-            Opcode::LdLd8 => Load(Single(L), Imm8(memory[1])),
+            Opcode::LdAd8 => Load(Single(A), Imm8(byte.unwrap())),
+            Opcode::LdBd8 => Load(Single(B), Imm8(byte.unwrap())),
+            Opcode::LdCd8 => Load(Single(C), Imm8(byte.unwrap())),
+            Opcode::LdDd8 => Load(Single(D), Imm8(byte.unwrap())),
+            Opcode::LdEd8 => Load(Single(E), Imm8(byte.unwrap())),
+            Opcode::LdHd8 => Load(Single(H), Imm8(byte.unwrap())),
+            Opcode::LdLd8 => Load(Single(L), Imm8(byte.unwrap())),
             Opcode::LdABC => Load(Single(A), RegAddr(BC)),
             Opcode::LdADE => Load(Single(A), RegAddr(DE)),
             Opcode::LdAHLinc => LoadWithOp(Single(A), RegAddr(HL), PostLoad::Inc),
@@ -465,10 +461,10 @@ impl Instruction {
             Opcode::LdEHL => Load(Single(E), RegAddr(HL)),
             Opcode::LdHHL => Load(Single(H), RegAddr(HL)),
             Opcode::LdLHL => Load(Single(L), RegAddr(HL)),
-            Opcode::LdBCd16 => Load(Double(BC), Imm16(LE::read_u16(&memory[1..3]))),
-            Opcode::LdDEd16 => Load(Double(DE), Imm16(LE::read_u16(&memory[1..3]))),
-            Opcode::LdHLd16 => Load(Double(HL), Imm16(LE::read_u16(&memory[1..3]))),
-            Opcode::LdSPd16 => Load(Double(SP), Imm16(LE::read_u16(&memory[1..3]))),
+            Opcode::LdBCd16 => Load(Double(BC), Imm16(word.unwrap())),
+            Opcode::LdDEd16 => Load(Double(DE), Imm16(word.unwrap())),
+            Opcode::LdHLd16 => Load(Double(HL), Imm16(word.unwrap())),
+            Opcode::LdSPd16 => Load(Double(SP), Imm16(word.unwrap())),
             Opcode::LdAA => Load(Single(A), RegImm(A)),
             Opcode::LdAB => Load(Single(A), RegImm(B)),
             Opcode::LdAC => Load(Single(A), RegImm(C)),
@@ -519,9 +515,9 @@ impl Instruction {
             Opcode::LdLH => Load(Single(L), RegImm(H)),
             Opcode::LdLL => Load(Single(L), RegImm(L)),
             Opcode::LdAioC => Load(Single(A), Source::IoPortReg(C)),
-            Opcode::LdhAa8 => Load(Single(A), Source::IoPortImm(memory[1])),
-            Opcode::LdAa16 => Load(Single(A), Source::Addr(LE::read_u16(&memory[1..3]))),
-            Opcode::LdHLSPs8 => Load(Double(HL), Source::SpWithOffset(memory[1] as i8)),
+            Opcode::LdhAa8 => Load(Single(A), Source::IoPortImm(byte.unwrap())),
+            Opcode::LdAa16 => Load(Single(A), Source::Addr(word.unwrap())),
+            Opcode::LdHLSPs8 => Load(Double(HL), Source::SpWithOffset(byte.unwrap() as i8)),
             Opcode::LdSPHL => LoadSP(HL),
             Opcode::LdHLA => Store(Dest::RegAddr(HL), RegImm(A)),
             Opcode::LdHLB => Store(Dest::RegAddr(HL), RegImm(B)),
@@ -530,15 +526,15 @@ impl Instruction {
             Opcode::LdHLE => Store(Dest::RegAddr(HL), RegImm(E)),
             Opcode::LdHLH => Store(Dest::RegAddr(HL), RegImm(H)),
             Opcode::LdHLL => Store(Dest::RegAddr(HL), RegImm(L)),
-            Opcode::LdHLd8 => Store(Dest::RegAddr(HL), Imm8(memory[1])),
+            Opcode::LdHLd8 => Store(Dest::RegAddr(HL), Imm8(byte.unwrap())),
             Opcode::LdBCA => Store(Dest::RegAddr(BC), RegImm(A)),
             Opcode::LdDEA => Store(Dest::RegAddr(DE), RegImm(A)),
-            Opcode::Lda16A => Store(Dest::Addr(LE::read_u16(&memory[1..3])), RegImm(A)),
-            Opcode::Ldha8A => Store(Dest::IoPort(memory[1]), Source::RegImm(A)),
+            Opcode::Lda16A => Store(Dest::Addr(word.unwrap()), RegImm(A)),
+            Opcode::Ldha8A => Store(Dest::IoPort(byte.unwrap()), Source::RegImm(A)),
             Opcode::LdioCA => Store(Dest::IoPortReg(C), Source::RegImm(A)),
             Opcode::LdHLincA => StoreWithOp(Dest::RegAddr(HL), RegImm(A), PostStore::Inc),
             Opcode::LdHLdecA => StoreWithOp(Dest::RegAddr(HL), RegImm(A), PostStore::Dec),
-            Opcode::Lda16SP => StoreSP(LE::read_u16(&memory[1..3])),
+            Opcode::Lda16SP => StoreSP(word.unwrap()),
             Opcode::PushAF => Push(AF),
             Opcode::PushBC => Push(BC),
             Opcode::PushDE => Push(DE),
@@ -547,11 +543,11 @@ impl Instruction {
             Opcode::PopBC => Pop(BC),
             Opcode::PopDE => Pop(DE),
             Opcode::PopHL => Pop(HL),
-            Opcode::Call => Call(LE::read_u16(&memory[1..3]), Always),
-            Opcode::CallZ => Call(LE::read_u16(&memory[1..3]), Zero),
-            Opcode::CallNZ => Call(LE::read_u16(&memory[1..3]), NotZero),
-            Opcode::CallC => Call(LE::read_u16(&memory[1..3]), Carry),
-            Opcode::CallNC => Call(LE::read_u16(&memory[1..3]), NotCarry),
+            Opcode::Call => Call(word.unwrap(), Always),
+            Opcode::CallZ => Call(word.unwrap(), Zero),
+            Opcode::CallNZ => Call(word.unwrap(), NotZero),
+            Opcode::CallC => Call(word.unwrap(), Carry),
+            Opcode::CallNC => Call(word.unwrap(), NotCarry),
             Opcode::Rst0 => Call(0x0000, Always),
             Opcode::Rst1 => Call(0x0008, Always),
             Opcode::Rst2 => Call(0x0010, Always),
@@ -568,9 +564,10 @@ impl Instruction {
             Opcode::RetI => RetI,
             Opcode::Prefix => {
                 cb_opcode = Some(
-                    CbOpcode::from_u8(memory[1]).ok_or(GbError::UnknownCbInstruction(memory[1]))?,
+                    CbOpcode::from_u8(byte.unwrap())
+                        .ok_or(GbError::UnknownCbInstruction(byte.unwrap()))?,
                 );
-                Instruction::decode_cb(memory[1])?
+                Instruction::decode_cb(byte.unwrap())?
             }
         };
 

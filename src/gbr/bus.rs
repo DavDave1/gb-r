@@ -3,9 +3,8 @@ use std::{fs, path::PathBuf};
 use byteorder::{ByteOrder, LittleEndian};
 
 use super::{
-    apu::APU, dma::DMA, instruction::Instruction, interrupts::InterruptHandler,
-    io_registers::IORegisters, mbc::MBC, memory_map::*, oam::ObjAttributeMemory, ppu::PPU,
-    timer::Timer, GbError,
+    apu::APU, dma::DMA, interrupts::InterruptHandler, io_registers::IORegisters, mbc::MBC,
+    memory_map::*, oam::ObjAttributeMemory, ppu::PPU, timer::Timer, GbError,
 };
 
 #[cfg(test)]
@@ -13,7 +12,6 @@ use mockall::automock;
 
 #[cfg_attr(test, automock)]
 pub trait BusAccess {
-    fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError>;
     fn read_byte(&self, addr: u16) -> Result<u8, GbError>;
     fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError>;
     fn read_word(&self, addr: u16) -> Result<u16, GbError>;
@@ -93,36 +91,6 @@ impl Bus {
 }
 
 impl BusAccess for Bus {
-    fn fetch_instruction(&self, addr: u16) -> Result<Instruction, GbError> {
-        match map_address(addr)? {
-            MappedAddress::CartRom(addr) => {
-                if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
-                    let len = Instruction::peek_len(self.boot_rom[addr as usize])? as usize;
-                    Instruction::decode(&self.boot_rom[addr as usize..addr as usize + len])
-                } else {
-                    let len = Instruction::peek_len(self.mbc.read_byte(addr)?)? as usize;
-
-                    let mut instr_data = vec![0; len];
-                    for i in 0..len as u16 {
-                        instr_data[i as usize] = self.mbc.read_byte(addr + i)?;
-                    }
-                    Instruction::decode(&instr_data)
-                }
-            }
-            MappedAddress::WorkRam(addr) => {
-                let local_addr = addr - WRAM_START;
-                let len = Instruction::peek_len(self.wram[local_addr as usize])? as usize;
-                Instruction::decode(&self.wram[local_addr as usize..local_addr as usize + len])
-            }
-            MappedAddress::HighRam(addr) => {
-                let local_addr = addr - HRAM_START;
-                let len = Instruction::peek_len(self.hram[local_addr as usize])? as usize;
-                Instruction::decode(&self.hram[local_addr as usize..local_addr as usize + len])
-            }
-            _ => Err(GbError::AddrOutOfBounds(addr)),
-        }
-    }
-
     fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
         match map_address(addr)? {
             MappedAddress::CartRom(addr) => {
@@ -187,7 +155,7 @@ impl BusAccess for Bus {
     fn read_word(&self, addr: u16) -> Result<u16, GbError> {
         match map_address(addr)? {
             MappedAddress::CartRom(addr) => {
-                if self.boot_rom_lock {
+                if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
                     Ok(LittleEndian::read_u16(&self.boot_rom[addr as usize..]))
                 } else {
                     self.mbc.read_word(addr)

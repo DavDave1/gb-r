@@ -1,13 +1,15 @@
 use std::fmt;
 
+use enum_primitive::FromPrimitive;
+
 use crate::gbr::alu::ALU;
 use crate::gbr::GbError;
 
 use super::{
     bus::BusAccess,
     instruction::{
-        Dest, DoubleRegType, GenericRegType, InstructionType, JumpCondition, JumpType, PostLoad,
-        SingleRegType, Source,
+        opcode::Opcode, Dest, DoubleRegType, GenericRegType, Instruction, InstructionType,
+        JumpCondition, JumpType, PostLoad, SingleRegType, Source,
     },
     interrupts::InterruptType,
 };
@@ -464,6 +466,31 @@ impl CPU {
             }
         }
     }
+
+    fn fetch_instruction(&mut self, bus: &dyn BusAccess) -> Result<Instruction, GbError> {
+        let opcode_data = bus.read_byte(self.reg_pc)?;
+
+        let opcode =
+            Opcode::from_u8(opcode_data).ok_or(GbError::UnknownInstruction(opcode_data))?;
+
+        let byte = if opcode.length() == 2 {
+            Some(bus.read_byte(self.reg_pc + 1)?)
+        } else {
+            None
+        };
+
+        let word = if opcode.length() == 3 {
+            Some(bus.read_word(self.reg_pc + 1)?)
+        } else {
+            None
+        };
+
+        self.reg_pc_prev = self.reg_pc;
+        self.reg_pc += opcode.length() as u16;
+
+        Instruction::decode(opcode, byte, word)
+    }
+
     pub fn step(&mut self, bus: &mut dyn BusAccess) -> Result<u8, GbError> {
         if self.halted {
             self.check_wakeup(bus)?;
@@ -474,11 +501,7 @@ impl CPU {
             return Ok(5);
         }
 
-        let instr = bus.fetch_instruction(self.reg_pc)?;
-
-        self.reg_pc_prev = self.reg_pc;
-
-        self.reg_pc += instr.len() as u16;
+        let instr = self.fetch_instruction(bus)?;
 
         let mut jumped = false;
 
@@ -577,20 +600,8 @@ mod tests {
             }
         }
 
-        fn exec(&mut self, opcode: Opcode, data: &[u8]) -> u8 {
-            let mut instr_data = vec![0; data.len() + 1];
-            instr_data[0] = opcode as u8;
-            instr_data[1..].copy_from_slice(data);
-
-            let instr = Instruction::decode(&instr_data).unwrap();
-            self.bus
-                .expect_fetch_instruction()
-                .return_once(|_| Ok(instr));
-
-            for d in data {
-                let v = *d;
-                self.bus.expect_read_byte().return_once(move |_| Ok(v));
-            }
+        fn exec(&mut self, opcode: Opcode, byte: Option<u8>, word: Option<u16>) -> u8 {
+            let instr = Instruction::decode(opcode, byte, word).unwrap();
 
             self.cpu.step(&mut self.bus).unwrap()
         }
@@ -600,7 +611,7 @@ mod tests {
     fn stop() {
         let mut tester = CpuTester::new();
 
-        let cycles = tester.exec(Opcode::Stop, &[0; 0]);
+        let cycles = tester.exec(Opcode::Stop, None, None);
 
         assert_eq!(cycles, 1);
         assert_eq!(tester.cpu.low_power_mode, true);
@@ -610,7 +621,7 @@ mod tests {
     fn load_byte_imm() {
         let mut tester = CpuTester::new();
 
-        let cycles = tester.exec(Opcode::LdAd8, &[0xAB]);
+        let cycles = tester.exec(Opcode::LdAd8, Some(0xAB), None);
 
         assert_eq!(cycles, 2);
         assert_eq!(tester.cpu.read_single_reg(&A), 0xAB);
@@ -620,7 +631,7 @@ mod tests {
     fn load_word_imm() {
         let mut tester = CpuTester::new();
 
-        let cycles = tester.exec(Opcode::LdHLd16, &[0xAB, 0xBA]);
+        let cycles = tester.exec(Opcode::LdHLd16, None, Some(0xBAAB));
 
         assert_eq!(cycles, 3);
         assert_eq!(tester.cpu.read_hl(), 0xBAAB);
@@ -636,7 +647,7 @@ mod tests {
             .with(eq(0xBBAA))
             .return_once(|_| Ok(0x12));
 
-        let cycles = tester.exec(Opcode::LdAa16, &[0xAA, 0xBB]);
+        let cycles = tester.exec(Opcode::LdAa16, None, Some(0xBBAA));
 
         assert_eq!(cycles, 4);
         assert_eq!(tester.cpu.read_single_reg(&A), 0x12);
