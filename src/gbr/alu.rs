@@ -19,17 +19,7 @@ impl ALU {
         match op {
             Add(dst, src) => ALU::add(cpu, bus, dst, src, false),
             Add16(dst, src) => Ok(ALU::add16(cpu, dst, src)),
-            AddSP(offset) => {
-                let mut val = cpu.read_sp();
-                if *offset > 0 {
-                    val += *offset as u16;
-                } else {
-                    val -= offset.abs() as u16;
-                }
-
-                cpu.write_sp(val);
-                Ok(())
-            }
+            AddSP(offset) => Ok(ALU::add_sp(cpu, *offset)),
             Adc(dst, src) => ALU::add(cpu, bus, dst, src, true),
             Sub(dst, src) => ALU::sub(cpu, bus, dst, src, false),
             Sbc(dst, src) => ALU::sub(cpu, bus, dst, src, true),
@@ -199,6 +189,20 @@ impl ALU {
         cpu.write_double_reg(dst, result);
     }
 
+    pub fn add_sp(cpu: &mut CPU, offset: i8) {
+        let a = cpu.read_sp();
+        let b = offset as i16 as u16; // signextend offset
+
+        cpu.set_flags(
+            false,
+            false,
+            (a & 0x000F) + (b & 0x000F) > 0x000F,
+            (a & 0x00FF) + (b & 0x00FF) > 0x00FF,
+        );
+
+        cpu.write_sp(a.wrapping_add(b));
+    }
+
     fn sub(
         cpu: &mut CPU,
         bus: &dyn BusAccess,
@@ -280,7 +284,7 @@ impl ALU {
 
         let result = value << 4 | high >> 4;
 
-        cpu.set_zero_flag(result == 0);
+        cpu.set_flags(result == 0, false, false, false);
 
         cpu.write_to_reg_or_addr(bus, src, result)
     }
@@ -289,7 +293,7 @@ impl ALU {
     fn da(cpu: &mut CPU, src: &SingleRegType) {
         let mut val = cpu.read_single_reg(src);
         // BCD addition
-        if cpu.get_bcd_n_flag() {
+        if !cpu.get_bcd_n_flag() {
             if cpu.get_carry_flag() || val > 0x99 {
                 val += 0x60;
                 cpu.set_carry_flag(true);
@@ -976,6 +980,8 @@ mod test {
 
         assert_eq!(tester.cpu.read_single_reg(&H), 0x1F);
 
+        tester.check_flags(false, false, false, false);
+
         tester.cpu.write_de(0x0A0A);
 
         tester.bus.expect_read_byte().return_once(|_| Ok(0xAB));
@@ -986,6 +992,8 @@ mod test {
             .return_once(|_, _| Ok(()));
 
         tester.exec(Swap(Double(DE)));
+
+        tester.check_flags(false, false, false, false);
     }
 
     #[test]

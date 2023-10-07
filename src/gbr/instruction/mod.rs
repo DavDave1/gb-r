@@ -14,7 +14,7 @@ pub enum InstructionType {
     Stop,
     Halt,
     FlipCarry,
-    ClearCarry,
+    SetCarry,
     MasterInterrupt(bool), // enable/disable
     Arithmetic(ArithmeticType),
     Jump(JumpCondition, JumpType),
@@ -307,6 +307,10 @@ pub struct Instruction {
 }
 
 impl Instruction {
+    pub fn opcode(&self) -> Opcode {
+        self.opcode
+    }
+
     pub fn decode(opcode: Opcode, byte: Option<u8>, word: Option<u16>) -> Result<Self, GbError> {
         use ArithmeticType::*;
         use DoubleRegType::*;
@@ -322,8 +326,8 @@ impl Instruction {
             Opcode::Stop => Stop,
             Opcode::Halt => Halt,
             Opcode::DaA => Arithmetic(Da(A)),
-            Opcode::Scf => FlipCarry,
-            Opcode::Ccf => ClearCarry,
+            Opcode::Scf => SetCarry,
+            Opcode::Ccf => FlipCarry,
             Opcode::Di => MasterInterrupt(false),
             Opcode::Ei => MasterInterrupt(true),
             Opcode::IncA => Arithmetic(Inc(Single(A))),
@@ -617,7 +621,7 @@ impl Instruction {
             CbOpcode::RrcE => Arithmetic(Rrc(Single(E), false)),
             CbOpcode::RrcH => Arithmetic(Rrc(Single(H), false)),
             CbOpcode::RrcL => Arithmetic(Rrc(Single(L), false)),
-            CbOpcode::RrcHL => Arithmetic(Rlc(Double(HL), false)),
+            CbOpcode::RrcHL => Arithmetic(Rrc(Double(HL), false)),
             CbOpcode::SlaA => Arithmetic(Sla(Single(A))),
             CbOpcode::SlaB => Arithmetic(Sla(Single(B))),
             CbOpcode::SlaC => Arithmetic(Sla(Single(C))),
@@ -881,7 +885,7 @@ impl Display for Instruction {
             Stop => write!(f, "Stop"),
             Halt => write!(f, "Halt"),
             FlipCarry => write!(f, "Flip CY"),
-            ClearCarry => write!(f, "Clear CY"),
+            SetCarry => write!(f, "Set CY"),
             MasterInterrupt(enable) => write!(f, "IME {}", enable),
             Arithmetic(ar_type) => write!(f, "{}", ar_type),
             Jump(cond, jump_type) => write!(f, "J {}, {}", cond, jump_type),

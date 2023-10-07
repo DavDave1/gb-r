@@ -39,6 +39,14 @@ impl InterruptHandler {
         self.joypad.set = value & 0b00010000 != 0;
     }
 
+    pub fn read_if(&self) -> u8 {
+        self.vblank.set as u8
+            | (self.lcd_stat.set as u8) << 1
+            | (self.timer.set as u8) << 2
+            | (self.serial.set as u8) << 3
+            | (self.joypad.set as u8) << 4
+    }
+
     pub fn write_ie(&mut self, value: u8) {
         self.vblank.enabled = value & 0b00000001 != 0;
         self.lcd_stat.enabled = value & 0b00000010 != 0;
@@ -53,26 +61,6 @@ impl InterruptHandler {
             | (self.timer.enabled as u8) << 2
             | (self.serial.enabled as u8) << 3
             | (self.joypad.enabled as u8) << 4
-    }
-
-    pub fn enable(&mut self, ir: InterruptType) {
-        match ir {
-            InterruptType::VBlank => self.vblank.enabled = true,
-            InterruptType::LcdStat => self.lcd_stat.enabled = true,
-            InterruptType::Timer => self.timer.enabled = true,
-            InterruptType::Serial => self.serial.enabled = true,
-            InterruptType::Joypad => self.joypad.enabled = true,
-        }
-    }
-
-    pub fn disable(&mut self, ir: InterruptType) {
-        match ir {
-            InterruptType::VBlank => self.vblank.enabled = false,
-            InterruptType::LcdStat => self.lcd_stat.enabled = false,
-            InterruptType::Timer => self.timer.enabled = false,
-            InterruptType::Serial => self.serial.enabled = false,
-            InterruptType::Joypad => self.joypad.enabled = false,
-        }
     }
 
     pub fn set(&mut self, ir: InterruptType) {

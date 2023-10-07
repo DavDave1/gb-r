@@ -70,9 +70,8 @@ pub struct Timer {
 impl Timer {
     pub fn step(&mut self, cpu_cycles: u8, ir_handler: &mut InterruptHandler) {
         self.update_divider(cpu_cycles);
-        let was_reset = self.update_counter(cpu_cycles);
 
-        if was_reset {
+        if self.enable && self.update_counter(cpu_cycles) {
             ir_handler.set(InterruptType::Timer);
         }
     }
@@ -127,8 +126,8 @@ impl Timer {
         let counts_per_cycles = self.clock_select.counts_per_cycle();
         self.cycles_elapsed_counter += cpu_cycles as u64;
         if self.cycles_elapsed_counter >= counts_per_cycles {
-            if self.counter == self.modulo {
-                self.counter = 0;
+            if self.counter == 0xFF {
+                self.counter = self.modulo;
                 was_reset = true;
             } else {
                 self.counter += 1;

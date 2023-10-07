@@ -20,6 +20,37 @@ const TIMER_IR_ADDRESS: u16 = 0x0050;
 const SERIAL_IR_ADDRESS: u16 = 0x0058;
 const JOYPAD_IR_ADDRESS: u16 = 0x0060;
 
+#[derive(Default)]
+struct Delay<Type: Copy + Default, const CYCLES: usize = 1> {
+    v: Type,
+    next: Type,
+    delay: usize,
+}
+
+impl<Type: Copy + Default, const CYCLES: usize> Delay<Type, CYCLES> {
+    pub fn set(&mut self, v: Type) {
+        self.next = v;
+        self.delay = 0;
+    }
+
+    pub fn get(&self) -> Type {
+        self.v
+    }
+
+    pub fn set_now(&mut self, v: Type) {
+        self.v = v;
+        self.next = v;
+    }
+
+    pub fn tick(&mut self) {
+        if self.delay == CYCLES {
+            self.v = self.next;
+        } else {
+            self.delay += 1;
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct CpuState {
     pub af: u16,
@@ -81,7 +112,7 @@ pub struct CPU {
     pub reg_pc_prev: u16,
 
     low_power_mode: bool,
-    ime: bool,
+    ime: Delay<bool>,
     halted: bool,
 }
 
@@ -91,12 +122,12 @@ impl CPU {
     }
 
     pub fn read_af(&self) -> u16 {
-        (self.reg_a as u16) << 8 | self.reg_f as u16
+        (self.reg_a as u16) << 8 | (self.reg_f & 0xF0) as u16
     }
 
     pub fn write_af(&mut self, value: u16) {
         self.reg_a = (value >> 8) as u8;
-        self.reg_f = value as u8;
+        self.reg_f = value as u8 & 0xF0; // zero lower 4 bits because not used
     }
 
     pub fn read_bc(&self) -> u16 {
@@ -274,9 +305,12 @@ impl CPU {
     }
 
     fn pop_stack(&mut self, bus: &dyn BusAccess) -> Result<u16, GbError> {
-        let value = bus.read_word(self.reg_sp)?;
+        let low = bus.read_byte(self.reg_sp)? as u16;
+        let high = bus.read_byte(self.reg_sp + 1)? as u16;
+
         self.reg_sp += 2;
-        Ok(value)
+
+        Ok((high << 8) | low)
     }
 
     fn test_condition(&self, condition: &JumpCondition) -> bool {
@@ -340,8 +374,10 @@ impl CPU {
             GenericRegType::Double(reg) => match source {
                 Source::Imm16(val) => self.write_double_reg(reg, *val),
                 Source::SpWithOffset(offset) => {
-                    let sp = (self.reg_sp as i32 + *offset as i32) as u16;
-                    self.write_double_reg(reg, sp);
+                    let sp_old = self.reg_sp;
+                    ALU::add_sp(self, *offset);
+                    self.write_double_reg(reg, self.reg_sp);
+                    self.write_sp(sp_old);
                 }
                 _ => return Err(GbError::IllegalOp("load u8 into double register".into())),
             },
@@ -400,23 +436,22 @@ impl CPU {
     }
 
     fn goto_interrupt(&mut self, bus: &mut dyn BusAccess, ir_addr: u16) -> Result<(), GbError> {
-        self.ime = false;
+        self.ime.set_now(false);
         self.push_stack(bus, self.reg_pc)?;
         self.reg_pc = ir_addr;
         Ok(())
     }
 
-    fn check_wakeup(&mut self, bus: &mut dyn BusAccess) -> Result<(), GbError> {
-        let ir_handler = bus.ir_handler();
-
-        if self.ime && ir_handler.any_pending_interrupt() {
+    fn is_halted(&mut self, bus: &mut dyn BusAccess) -> Result<bool, GbError> {
+        if self.halted && bus.ir_handler().any_pending_interrupt() {
             self.halted = false;
         }
-        Ok(())
+
+        Ok(self.halted)
     }
 
     fn check_interrupts(&mut self, bus: &mut dyn BusAccess) -> Result<bool, GbError> {
-        if self.ime {
+        if self.ime.get() {
             let ir_handler = bus.ir_handler_mut();
 
             if ir_handler.test(InterruptType::VBlank) {
@@ -453,18 +488,8 @@ impl CPU {
         Ok(false)
     }
 
-    fn halt(&mut self, bus: &mut dyn BusAccess) {
-        if self.ime {
-            self.halted = true;
-        } else {
-            let ir_handler = bus.ir_handler();
-            if !ir_handler.any_pending_interrupt() {
-                self.halted = true;
-            } else {
-                // TODO halt bug
-                self.halted = false;
-            }
-        }
+    fn halt(&mut self, _bus: &mut dyn BusAccess) {
+        self.halted = true;
     }
 
     fn fetch_instruction(&mut self, bus: &dyn BusAccess) -> Result<Instruction, GbError> {
@@ -492,14 +517,15 @@ impl CPU {
     }
 
     pub fn step(&mut self, bus: &mut dyn BusAccess) -> Result<u8, GbError> {
-        if self.halted {
-            self.check_wakeup(bus)?;
+        if self.is_halted(bus)? {
             return Ok(1);
         }
 
         if self.check_interrupts(bus)? {
             return Ok(5);
         }
+
+        self.ime.tick();
 
         let instr = self.fetch_instruction(bus)?;
 
@@ -509,9 +535,18 @@ impl CPU {
             InstructionType::Nop => (),
             InstructionType::Stop => self.low_power_mode = true,
             InstructionType::Halt => self.halt(bus),
-            InstructionType::FlipCarry => self.set_carry_flag(!self.get_carry_flag()),
-            InstructionType::ClearCarry => self.set_carry_flag(false),
-            InstructionType::MasterInterrupt(enable) => self.ime = *enable,
+            InstructionType::FlipCarry => {
+                self.set_flags(self.get_zero_flag(), false, false, !self.get_carry_flag())
+            }
+            InstructionType::SetCarry => self.set_flags(self.get_zero_flag(), false, false, true),
+            InstructionType::MasterInterrupt(enable) => {
+                if *enable {
+                    self.ime.set(true);
+                } else {
+                    self.ime.set_now(false);
+                }
+            }
+
             InstructionType::Arithmetic(ar_type) => ALU::exec(ar_type, self, bus)?,
             InstructionType::Jump(condition, jump_type) => {
                 jumped = self.jump(condition, jump_type);
@@ -541,7 +576,7 @@ impl CPU {
             InstructionType::Call(addr, cond) => jumped = self.call(bus, *addr, cond)?,
             InstructionType::Ret(cond) => jumped = self.ret(bus, cond)?,
             InstructionType::RetI => {
-                self.ime = true;
+                self.ime.set_now(true);
                 jumped = self.ret(bus, &JumpCondition::Always)?;
             }
         }
@@ -561,7 +596,7 @@ impl CPU {
             carry: self.get_carry_flag(),
             bcd_h: self.get_bcd_h_flag(),
             bcd_n: self.get_bcd_n_flag(),
-            ime: self.ime,
+            ime: self.ime.get(),
             halted: self.halted,
         }
     }

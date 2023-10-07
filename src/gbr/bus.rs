@@ -123,9 +123,7 @@ impl BusAccess for Bus {
             )),
             MappedAddress::IORegisters(addr) => self.io_registers.read(addr),
             MappedAddress::HighRam(addr) => Ok(self.hram[(addr - HRAM_START) as usize]),
-            MappedAddress::InterruptFlagRegister => Err(GbError::Unimplemented(
-                "reading interrupt flag register".into(),
-            )),
+            MappedAddress::InterruptFlagRegister => Ok(self.ir_handler.read_if()),
             MappedAddress::InterruptEnableRegister => Ok(self.ir_handler.read_ie()),
         }
     }
