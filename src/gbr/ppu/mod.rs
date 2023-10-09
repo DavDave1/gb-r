@@ -207,7 +207,10 @@ impl PPU {
     }
 
     pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
-        if self.lcd_control.display_enable {
+        // VRAM is not accessible when display is enabled and PPU is in Mode3
+        if self.lcd_control.display_enable
+            && self.lcd_status.mode.get() == ScreenMode::TransferringData
+        {
             return Ok(0xFF);
         }
 
@@ -215,7 +218,10 @@ impl PPU {
     }
 
     pub fn read_word(&self, addr: u16) -> Result<u16, GbError> {
-        if self.lcd_control.display_enable {
+        // VRAM is not accessible when display is enabled and PPU is in Mode3
+        if self.lcd_control.display_enable
+            && self.lcd_status.mode.get() == ScreenMode::TransferringData
+        {
             return Ok(0xFFFF);
         }
 
@@ -225,7 +231,10 @@ impl PPU {
     }
 
     pub fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
-        if self.lcd_control.display_enable {
+        // VRAM is not accessible when display is enabled and PPU is in Mode3
+        if self.lcd_control.display_enable
+            && self.lcd_status.mode.get() == ScreenMode::TransferringData
+        {
             return Ok(());
         }
 
