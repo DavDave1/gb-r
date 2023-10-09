@@ -66,7 +66,6 @@ const WIN_POS_Y_REG_ADDR: u16 = 0xFF4A;
 const WIN_POS_X_REG_ADDR: u16 = 0xFF4B;
 
 pub type ScreenBuffer = Vec<u8>;
-pub type TileList = Vec<Tile>;
 
 #[derive(Default, Clone)]
 pub struct Point {
@@ -85,7 +84,9 @@ pub struct PpuState {
     pub lyc: u8,
     pub viewport: Point,
     pub win_pos: Point,
-    pub tiles_list: Vec<Tile>,
+    pub tiles: TileData,
+    pub bg_tilemap: Vec<u8>,
+    pub win_tilemap: Vec<u8>,
 }
 
 pub struct PPU {
@@ -322,6 +323,17 @@ impl PPU {
     }
 
     pub fn state(&self) -> PpuState {
+        let mut bg_tilemap = vec![0; 32 * 32];
+        let mut win_tilemap = vec![0; 32 * 32];
+
+        bg_tilemap.copy_from_slice(
+            &self.vram[TILEMAP_BLOCK0_START as usize..TILEMAP_BLOCK0_START as usize + 1024],
+        );
+
+        win_tilemap.copy_from_slice(
+            &self.vram[TILEMAP_BLOCK1_START as usize..TILEMAP_BLOCK1_START as usize + 1024],
+        );
+
         PpuState {
             lcd_control: self.lcd_control,
             lcd_status: self.lcd_status,
@@ -332,7 +344,9 @@ impl PPU {
             lyc: self.lyc,
             viewport: self.viewport.clone(),
             win_pos: self.win_pos.clone(),
-            tiles_list: self.tiles.list().clone(),
+            tiles: self.tiles.clone(),
+            bg_tilemap,
+            win_tilemap,
         }
     }
 

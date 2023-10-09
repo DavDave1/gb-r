@@ -7,5 +7,6 @@ mod interrupts_view;
 mod io_registers_view;
 mod mbc_view;
 mod palette_view;
+mod tilemap_view;
 mod tiles_view;
 mod ui;

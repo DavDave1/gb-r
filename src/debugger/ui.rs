@@ -17,21 +17,21 @@ use crate::gbr::game_boy::GbState;
 use super::debugger::{AsmState, DebuggerCommand};
 use super::debugger_app::EmuState;
 use super::palette_view::PaletteView;
+use super::tilemap_view::TilemapView;
 use super::tiles_view::TilesView;
 use super::{asm_view, cpu_view, mbc_view};
 use super::{interrupts_view, io_registers_view};
 
 struct UiState {
-    show_asm_view: bool,
-    show_cpu_view: bool,
-    show_registers_view: bool,
-    show_tiles: bool,
+    show_bg_tilemap: bool,
+    show_win_tilemap: bool,
     gb_state_next: Arc<RwLock<GbState>>,
     gb_state: GbState,
     asm_state_next: Arc<RwLock<AsmState>>,
     asm_state: AsmState,
     cmd_sig: Sender<DebuggerCommand>,
     tiles_view: TilesView,
+    tilemap_views: [TilemapView; 2],
     palette_view: PaletteView,
     emu_state: EmuState,
     emu_state_slot: Receiver<EmuState>,
@@ -46,16 +46,15 @@ impl UiState {
         emu_state_slot: Receiver<EmuState>,
     ) -> Self {
         Self {
-            show_asm_view: true,
-            show_cpu_view: true,
-            show_registers_view: true,
-            show_tiles: true,
+            show_bg_tilemap: false,
+            show_win_tilemap: false,
             gb_state_next: gb_state,
             gb_state: GbState::default(),
             asm_state_next: asm_state,
             asm_state: AsmState::default(),
             cmd_sig,
             tiles_view: TilesView::default(),
+            tilemap_views: Default::default(),
             palette_view: PaletteView::new(),
             emu_state: EmuState::Idle,
             emu_state_slot,
@@ -83,28 +82,48 @@ impl UiState {
         TopBottomPanel::top("menubar_container").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("Window", |ui| {
-                    if ui.button("Asm view...").clicked() {
-                        self.show_asm_view = true;
+                    if ui.button("BG Tile map...").clicked() {
+                        self.show_bg_tilemap = true;
                         ui.close_menu();
                     }
 
-                    if ui.button("CPU view...").clicked() {
-                        self.show_cpu_view = true;
-                        ui.close_menu();
-                    }
-
-                    if ui.button("IO registers view...").clicked() {
-                        self.show_registers_view = true;
-                        ui.close_menu();
-                    }
-
-                    if ui.button("Tiles view...").clicked() {
-                        self.show_tiles = true;
+                    if ui.button("Win Tile map...").clicked() {
+                        self.show_win_tilemap = true;
                         ui.close_menu();
                     }
                 });
             });
         });
+
+        if self.show_bg_tilemap {
+            egui::Window::new("BG tilemap")
+                .open(&mut self.show_bg_tilemap)
+                .show(ctx, |ui| {
+                    let view_idx = self.gb_state.ppu.lcd_control.bg_tile_map_area_sel as usize;
+                    self.tilemap_views[view_idx].show(
+                        &self.gb_state.ppu.bg_tilemap,
+                        &self.gb_state.ppu.tiles,
+                        &self.gb_state.ppu.bg_palette,
+                        self.gb_state.ppu.lcd_control.bg_and_window_tile_area_sel,
+                        ui,
+                    );
+                });
+        }
+
+        if self.show_win_tilemap {
+            egui::Window::new("Win tilemap")
+                .open(&mut self.show_win_tilemap)
+                .show(ctx, |ui| {
+                    let view_idx = self.gb_state.ppu.lcd_control.window_tile_area_sel as usize;
+                    self.tilemap_views[view_idx].show(
+                        &self.gb_state.ppu.win_tilemap,
+                        &self.gb_state.ppu.tiles,
+                        &self.gb_state.ppu.bg_palette,
+                        self.gb_state.ppu.lcd_control.bg_and_window_tile_area_sel,
+                        ui,
+                    );
+                });
+        }
 
         egui::TopBottomPanel::top("toolbar")
             .max_height(60.0)
@@ -170,7 +189,7 @@ impl UiState {
                 ui.vertical(|ui| {
                     ui.heading("Tiles");
                     self.tiles_view.show(
-                        &self.gb_state.ppu.tiles_list,
+                        &self.gb_state.ppu.tiles,
                         &self.gb_state.ppu.bg_palette,
                         ui,
                     );
