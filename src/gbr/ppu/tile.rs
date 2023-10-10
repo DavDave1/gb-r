@@ -4,9 +4,9 @@ use super::{TILE_BLOCK_SIZE, TILE_DATA_SIZE, TILE_HEIGHT, TILE_WIDTH};
 
 lazy_static! {
     pub static ref TILE_COLOR_ID: Vec<[u8; 3]> = {
-        let mut v = vec![[0; 3]; 256];
+        let mut v = vec![[0; 3]; 3 * TILE_BLOCK_SIZE];
 
-        for i in 0..256 {
+        for i in 0..v.len() {
             let c = RandomColor::new().to_rgb_array();
             v[i][0] = c[0];
             v[i][1] = c[1];
@@ -59,6 +59,7 @@ impl Tile {
     }
 }
 
+#[derive(Default, Clone)]
 pub struct TileData {
     tiles: Vec<Tile>,
 }

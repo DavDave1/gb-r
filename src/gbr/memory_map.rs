@@ -15,7 +15,7 @@ pub const CART_RAM_START: u16 = 0xA000;
 pub const CART_RAM_END: u16 = 0xBFFF;
 
 pub const WRAM_START: u16 = 0xC000;
-const WRAM_END: u16 = 0xDFFF;
+pub const WRAM_END: u16 = 0xDFFF;
 pub const WRAM_SIZE: usize = (WRAM_END - WRAM_START + 1) as usize;
 
 const ECHO_RAM_START: u16 = 0xE000;

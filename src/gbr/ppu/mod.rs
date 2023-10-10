@@ -13,7 +13,7 @@ use self::{
     palette::Palette,
     pixel_processor::PixelProcessor,
     rgba::Rgba,
-    tile::{Tile, TileData},
+    tile::TileData,
 };
 use crate::gbr::{
     memory_map::{VRAM_SIZE, VRAM_START},
@@ -25,12 +25,7 @@ use super::{
     oam::ObjAttributeMemory,
 };
 
-// rlative to VRAM base addr
-const TILE_BLOCK0_START: u16 = 0x0000;
-const TILE_BLOCK0_END: u16 = 0x07FF;
-const TILE_BLOCK1_START: u16 = TILE_BLOCK0_END + 1;
-const TILE_BLOCK1_END: u16 = 0x0FFF;
-const TILE_BLOCK2_START: u16 = TILE_BLOCK1_END + 1;
+// relative to VRAM base addr
 const TILE_BLOCK2_END: u16 = 0x17FF;
 
 const TILEMAP_BLOCK0_START: u16 = 0x9800 - VRAM_START;
@@ -67,7 +62,7 @@ const WIN_POS_X_REG_ADDR: u16 = 0xFF4B;
 
 pub type ScreenBuffer = Vec<u8>;
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct Point {
     pub x: u8,
     pub y: u8,
@@ -173,16 +168,7 @@ impl PPU {
         } else if self.dots <= MODE_2_DOTS {
             self.lcd_status.mode.set(ScreenMode::SreachingOAM);
         } else if self.lcd_status.mode.get() == ScreenMode::SreachingOAM {
-            self.pixel_processor.start(
-                oam,
-                self.ly,
-                self.dots,
-                &self.viewport,
-                &self.lcd_control,
-                &self.vram,
-                &self.tiles,
-                &self.bg_palette,
-            );
+            self.pixel_processor.start(oam, self.ly, &self.viewport);
             self.lcd_status.mode.set(ScreenMode::TransferringData);
         } else if !self.pixel_processor.finished() {
             self.pixel_processor.process(
@@ -193,6 +179,7 @@ impl PPU {
                 &self.vram,
                 &self.tiles,
                 &self.bg_palette,
+                &self.obj_palettes,
             );
             if self.dots > MODE_3_DOTS_MAX {
                 log::error!("mode 3 out of bounds {}", self.dots);

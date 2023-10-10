@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use crate::gbr::{bus::Bus, cpu::CPU, ppu::PPU, GbError};
 
 use super::{
-    bus::BusAccess, cpu::CpuState, interrupts::InterruptHandlerState, io_registers::IORegisters,
-    mbc::MbcState, ppu::PpuState,
+    bus::BusAccess, cpu::CpuState, dma::DMA, interrupts::InterruptHandlerState,
+    io_registers::IORegisters, mbc::MbcState, oam::ObjAttribute, ppu::PpuState,
 };
 
 #[derive(Default, Clone)]
@@ -14,6 +14,7 @@ pub struct GbState {
     pub ir_handler: InterruptHandlerState,
     pub ppu: PpuState,
     pub mbc: MbcState,
+    pub oam: Vec<ObjAttribute>,
 }
 
 pub struct GameBoy {
@@ -59,6 +60,7 @@ impl GameBoy {
             ir_handler: self.bus.ir_handler().state(),
             ppu: self.bus.ppu().state(),
             mbc: self.bus.mbc().state(),
+            oam: self.bus.oam().state(),
         }
     }
 }

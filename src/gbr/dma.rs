@@ -1,3 +1,5 @@
+use crate::gbr::memory_map::{WRAM_END, WRAM_START};
+
 use super::{
     mbc::MBC,
     memory_map::{
@@ -12,6 +14,7 @@ use super::{
 enum SourceType {
     Cart,
     Vram,
+    Wram,
 }
 
 pub struct DMA {
@@ -33,6 +36,7 @@ impl DMA {
 
     pub fn step(
         &mut self,
+        wram: &[u8],
         ppu: &PPU,
         mbc: &MBC,
         oam: &mut ObjAttributeMemory,
@@ -43,6 +47,9 @@ impl DMA {
                 let data = match self.source_type {
                     SourceType::Vram => ppu.read_byte(self.source_addr + self.curr_index),
                     SourceType::Cart => mbc.read_byte(self.source_addr + self.curr_index),
+                    SourceType::Wram => {
+                        Ok(wram[(self.source_addr - WRAM_START + self.curr_index) as usize])
+                    }
                 }?;
 
                 oam.write_byte(OBJ_ATTRIBUTE_TABLE_START + self.curr_index, data)?;
@@ -59,7 +66,7 @@ impl DMA {
     }
 
     pub fn write_reg(&mut self, src: u8) {
-        self.source_addr = (src as u16) << 7;
+        self.source_addr = (src as u16) << 8;
         self.started = true;
         self.curr_index = 0;
 
@@ -67,6 +74,7 @@ impl DMA {
             CART_ROM_BANK0_START..=CART_ROM_ACTIVE_BANK_END => self.source_type = SourceType::Cart,
             VRAM_START..=VRAM_END => self.source_type = SourceType::Vram,
             CART_RAM_START..=CART_RAM_END => self.source_type = SourceType::Cart,
+            WRAM_START..=WRAM_END => self.source_type = SourceType::Wram,
             _ => {
                 log::warn!("Starting DMA from invalid addres {:#06X}", self.source_addr);
                 self.started = false;

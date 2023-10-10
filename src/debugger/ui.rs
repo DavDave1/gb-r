@@ -19,7 +19,7 @@ use super::debugger_app::EmuState;
 use super::palette_view::PaletteView;
 use super::tilemap_view::TilemapView;
 use super::tiles_view::TilesView;
-use super::{asm_view, cpu_view, mbc_view};
+use super::{asm_view, cpu_view, mbc_view, oam_view};
 use super::{interrupts_view, io_registers_view};
 
 struct UiState {
@@ -217,16 +217,17 @@ impl UiState {
                     });
 
                     ui.horizontal_wrapped(|ui| {
-                        ui.label("Obj Palette 0: ");
+                        ui.label("Obj Palettes: ");
                         self.palette_view
                             .show(&self.gb_state.ppu.obj_palettes[0], ui);
-                    });
-
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("Obj Palette 1: ");
+                        ui.spacing();
                         self.palette_view
                             .show(&self.gb_state.ppu.obj_palettes[1], ui);
                     });
+
+                    ui.separator();
+
+                    oam_view::show(&self.gb_state.oam, ui);
                 });
             });
     }

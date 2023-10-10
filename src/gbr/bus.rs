@@ -68,7 +68,8 @@ impl Bus {
     }
 
     pub fn step(&mut self, cycles: u8) -> Result<bool, GbError> {
-        self.dma.step(&self.ppu, &self.mbc, &mut self.oam, cycles)?;
+        self.dma
+            .step(&self.wram, &self.ppu, &self.mbc, &mut self.oam, cycles)?;
         self.timer.step(cycles, &mut self.ir_handler);
         self.serial.step(cycles, &mut self.ir_handler);
         self.apu.step(cycles)?;
@@ -90,6 +91,10 @@ impl Bus {
 
     pub fn mbc(&self) -> &MBC {
         &self.mbc
+    }
+
+    pub fn oam(&self) -> &ObjAttributeMemory {
+        &self.oam
     }
 }
 

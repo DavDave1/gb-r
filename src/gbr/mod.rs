@@ -9,11 +9,11 @@ pub mod interrupts;
 pub mod io_registers;
 pub mod mbc;
 pub mod memory_map;
+pub mod oam;
 pub mod ppu;
 pub mod timer;
 
 mod alu;
-mod oam;
 mod serial;
 
 use thiserror::Error;

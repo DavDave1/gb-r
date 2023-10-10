@@ -14,7 +14,36 @@ use super::{
 enum Step {
     GetTileIndex,
     GetTileData,
-    DrawTile,
+    PushBg,
+    PushObjs,
+    PopPixels,
+}
+
+struct Pixel {
+    color_id: u8,
+    palette_id: usize,
+    tile_index: usize,
+    is_bg: bool,
+}
+
+impl Pixel {
+    pub fn new(color_id: u8, palette_id: usize, tile_index: usize) -> Self {
+        Self {
+            color_id,
+            palette_id,
+            tile_index,
+            is_bg: true,
+        }
+    }
+
+    pub fn push_obj(&mut self, color_id: u8, palette_id: usize, tile_index: usize, bg_prio: bool) {
+        if self.is_bg && color_id != 0 && (!bg_prio || (bg_prio && self.color_id == 0)) {
+            self.color_id = color_id;
+            self.palette_id = palette_id;
+            self.tile_index = tile_index;
+            self.is_bg = false;
+        }
+    }
 }
 
 pub struct PixelProcessor {
@@ -28,6 +57,7 @@ pub struct PixelProcessor {
     scroll_x: u8,
     scroll_y: u8,
     objs: Vec<ObjAttribute>,
+    pixel_fifo: Vec<Pixel>,
     pub screen_buffer: Vec<u8>,
 }
 
@@ -44,34 +74,24 @@ impl PixelProcessor {
             scroll_x: 0,
             scroll_y: 0,
             objs: vec![],
+            pixel_fifo: vec![],
             screen_buffer: vec![0; (SCREEN_WIDTH * SCREEN_HEIGHT * 4) as usize],
         }
     }
 
-    pub fn start(
-        &mut self,
-        oam: &ObjAttributeMemory,
-        ly: u8,
-        dots: u16,
-        viewport: &Point,
-        lcd_ctrl: &LcdControlRegister,
-        vram: &[u8],
-        tiles: &TileData,
-        bg_palette: &Palette,
-    ) {
+    pub fn start(&mut self, oam: &ObjAttributeMemory, ly: u8, viewport: &Point) {
         self.scan_line_x = 0;
         self.old_dots = MODE_2_DOTS;
         self.curr_step = Step::GetTileIndex;
-        // self.screen_buffer[ly as usize].fill(0);
         self.curr_tile_index = 0;
         self.curr_tile_line = 0;
         self.curr_tile_msb = 0;
         self.curr_tile_lsb = 0;
         self.scroll_x = viewport.x;
         self.scroll_y = viewport.y;
-        self.objs = oam.get_objs_at_line(ly);
+        self.pixel_fifo.clear();
 
-        self.process(ly, dots, viewport, lcd_ctrl, vram, tiles, bg_palette);
+        self.objs = oam.get_objs_at_line(ly);
     }
 
     pub fn finished(&self) -> bool {
@@ -87,6 +107,7 @@ impl PixelProcessor {
         vram: &[u8],
         tiles: &TileData,
         bg_palette: &Palette,
+        obj_palettes: &[Palette],
     ) {
         if dots < self.old_dots {
             return;
@@ -108,17 +129,29 @@ impl PixelProcessor {
             if self.curr_step == Step::GetTileData {
                 self.get_tile_data(tiles, lcd_ctrl);
                 delta_dots -= 4;
-                self.curr_step = Step::DrawTile;
+                self.curr_step = Step::PushBg;
             }
 
             if delta_dots <= 0 {
                 break;
             }
 
-            if self.curr_step == Step::DrawTile {
-                self.draw_tile(ly, tiles, bg_palette);
-                self.scan_line_x += 8;
+            if self.curr_step == Step::PushBg {
+                self.push_bg(tiles);
+                self.curr_step = Step::PushObjs;
+                delta_dots -= 1;
+            }
+
+            if self.curr_step == Step::PushObjs {
+                self.curr_step = Step::PopPixels;
+                self.push_objs(ly, tiles, lcd_ctrl);
+                delta_dots -= 1;
+            }
+
+            if self.curr_step == Step::PopPixels {
                 self.curr_step = Step::GetTileIndex;
+                self.pop_pixels(ly, bg_palette, obj_palettes);
+                self.scan_line_x += 8;
                 delta_dots -= 1;
             }
         }
@@ -161,23 +194,82 @@ impl PixelProcessor {
             .tile_index_from_bg_map(self.curr_tile_index, lcd_ctrl.bg_and_window_tile_area_sel);
     }
 
-    fn draw_tile(&mut self, ly: u8, tiles: &TileData, bg_palette: &Palette) {
+    fn push_bg(&mut self, tiles: &TileData) {
         let tile = &tiles.list()[self.curr_tile_index];
 
         for x in 0..8 {
-            let screen_x = (self.scan_line_x + x) as usize;
+            self.pixel_fifo.push(Pixel::new(
+                tile.pixels[self.curr_tile_line as usize][x as usize],
+                0,
+                self.curr_tile_index,
+            ));
+        }
+    }
+
+    fn push_objs(&mut self, ly: u8, tiles: &TileData, lcd_ctrl: &LcdControlRegister) {
+        if lcd_ctrl.obj_enable == false {
+            return;
+        }
+
+        // Remove objects before scanline, since they will not be drawn anymore
+        self.objs.retain(|o| o.right() > self.scan_line_x as i16);
+
+        for obj in self.objs.iter() {
+            // Entire object is after scanline, don't process any other objects
+            // sice they will all be after scanline because they are x ordered
+            if obj.left() > self.scan_line_x as i16 + 8 {
+                break;
+            }
+
+            let tile = &tiles.list()[obj.tile_index() as usize];
+            let line = tile.pixels[(ly as i16 - obj.top()) as usize];
+
+            let x_start = 0.max(obj.left() - self.scan_line_x as i16);
+
+            let x_end = 8.min(obj.right() - self.scan_line_x as i16);
+
+            let tile_start = if x_start > 0 {
+                0
+            } else {
+                (self.scan_line_x as i16 - obj.left()) as usize
+            };
+
+            for (tile_x, fifo_x) in (x_start as usize..x_end as usize).enumerate() {
+                self.pixel_fifo[fifo_x].push_obj(
+                    line[tile_start + tile_x],
+                    obj.palette_id() as usize,
+                    obj.tile_index() as usize,
+                    obj.bg_win_prio(),
+                );
+            }
+        }
+    }
+
+    fn pop_pixels(&mut self, ly: u8, bg_palette: &Palette, obj_palettes: &[Palette]) {
+        for (x, pixel) in self.pixel_fifo.iter().enumerate() {
+            let screen_x = self.scan_line_x as usize + x;
             let screen_y = ly as usize;
             let screen_index = (screen_y * SCREEN_WIDTH as usize + screen_x) * 4;
 
-            self.screen_buffer[screen_index..screen_index + 4].copy_from_slice(
+            let palette = if pixel.is_bg {
                 &bg_palette
-                    .rgba(tile.pixels[self.curr_tile_line as usize][x as usize])
-                    .rgba,
-            );
+            } else {
+                &obj_palettes[pixel.palette_id]
+            };
 
-            // self.screen_buffer[screen_index..screen_index + 3]
-            //     .copy_from_slice(&TILE_COLOR_ID[self.curr_tile_index as usize]);
-            // self.screen_buffer[screen_index + 3] = 0xFF;
+            self.screen_buffer[screen_index..screen_index + 4]
+                .copy_from_slice(&palette.rgba(pixel.color_id).rgba);
+
+            // if pixel.is_bg {
+            //     self.screen_buffer[screen_index..screen_index + 4]
+            //         .copy_from_slice(&palette.rgba(pixel.color_id).rgba);
+            // } else {
+            //     self.screen_buffer[screen_index..screen_index + 3]
+            //         .copy_from_slice(&TILE_COLOR_ID[pixel.tile_index]);
+            //     self.screen_buffer[screen_index + 3] = 0xFF;
+            // }
         }
+
+        self.pixel_fifo.clear();
     }
 }
