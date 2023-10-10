@@ -63,9 +63,9 @@ const WIN_POS_X_REG_ADDR: u16 = 0xFF4B;
 pub type ScreenBuffer = Vec<u8>;
 
 #[derive(Default, Clone, Debug)]
-pub struct Point {
-    pub x: u8,
-    pub y: u8,
+pub struct Point<Type: Clone> {
+    pub x: Type,
+    pub y: Type,
 }
 
 #[derive(Default, Clone)]
@@ -76,8 +76,8 @@ pub struct PpuState {
     pub obj_palettes: [Palette; 2],
     pub ly: u8,
     pub lyc: u8,
-    pub viewport: Point,
-    pub win_pos: Point,
+    pub viewport: Point<u8>,
+    pub win_pos: Point<u8>,
     pub tiles: TileData,
     pub bg_tilemap: Vec<u8>,
     pub win_tilemap: Vec<u8>,
@@ -91,8 +91,8 @@ pub struct PPU {
     obj_palettes: [Palette; 2],
     ly: u8,
     lyc: u8,
-    viewport: Point,
-    win_pos: Point,
+    viewport: Point<u8>,
+    win_pos: Point<u8>,
     tiles: TileData,
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
     dots: u16,
@@ -175,6 +175,7 @@ impl PPU {
                 self.ly,
                 self.dots,
                 &self.viewport,
+                &self.win_pos,
                 &self.lcd_control,
                 &self.vram,
                 &self.tiles,

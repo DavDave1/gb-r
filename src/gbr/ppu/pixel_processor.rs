@@ -79,7 +79,7 @@ impl PixelProcessor {
         }
     }
 
-    pub fn start(&mut self, oam: &ObjAttributeMemory, ly: u8, viewport: &Point) {
+    pub fn start(&mut self, oam: &ObjAttributeMemory, ly: u8, viewport: &Point<u8>) {
         self.scan_line_x = 0;
         self.old_dots = MODE_2_DOTS;
         self.curr_step = Step::GetTileIndex;
@@ -102,7 +102,8 @@ impl PixelProcessor {
         &mut self,
         ly: u8,
         dots: u16,
-        viewport: &Point,
+        viewport: &Point<u8>,
+        win_position: &Point<u8>,
         lcd_ctrl: &LcdControlRegister,
         vram: &[u8],
         tiles: &TileData,
@@ -117,7 +118,7 @@ impl PixelProcessor {
 
         while delta_dots > 0 && !self.finished() {
             if self.curr_step == Step::GetTileIndex {
-                self.get_tile_index(lcd_ctrl, ly, viewport, vram);
+                self.get_tile_index(lcd_ctrl, ly, viewport, win_position, vram);
                 delta_dots -= 2;
                 self.curr_step = Step::GetTileData;
             }
@@ -163,30 +164,49 @@ impl PixelProcessor {
         &mut self,
         lcd_ctrl: &LcdControlRegister,
         ly: u8,
-        viewport: &Point,
+        viewport: &Point<u8>,
+        win_position: &Point<u8>,
         vram: &[u8],
     ) {
         self.scroll_x |= viewport.x & 0b11111000;
         self.scroll_y = viewport.y;
 
-        let tile_x = self.scroll_x.wrapping_add(self.scan_line_x) as u16;
-        let mut tile_y = self.scroll_y as u16 + ly as u16;
-        if tile_y > 255 + 8 {
-            tile_y -= 255
-        } else if tile_y > 255 {
-            tile_y -= 8;
-        }
+        let is_win = lcd_ctrl.window_enable
+            && win_position.y <= ly
+            && win_position.x - 7 <= self.scan_line_x;
 
-        self.curr_tile_line = (tile_y % 8) as u8;
-        let tilemap_addr = tile_y / 8 * 32 + tile_x / 8;
+        let tile_pos = if is_win {
+            self.get_win_tile_pos(ly, win_position)
+        } else {
+            self.get_bg_tile_pos(ly)
+        };
 
-        let tile_block_addr = if lcd_ctrl.bg_tile_map_area_sel {
+        self.curr_tile_line = (tile_pos.y % 8) as u8;
+        let tilemap_addr = tile_pos.y / 8 * 32 + tile_pos.x / 8;
+
+        let tile_block_addr = if (is_win && lcd_ctrl.window_tile_area_sel)
+            || (!is_win && lcd_ctrl.bg_tile_map_area_sel)
+        {
             TILEMAP_BLOCK1_START
         } else {
             TILEMAP_BLOCK0_START
         };
 
         self.curr_tile_index = vram[tile_block_addr as usize + tilemap_addr as usize] as usize;
+    }
+
+    fn get_win_tile_pos(&mut self, ly: u8, win_position: &Point<u8>) -> Point<u16> {
+        Point {
+            x: win_position.x.wrapping_add(self.scan_line_x) as u16,
+            y: win_position.y.wrapping_add(ly) as u16,
+        }
+    }
+
+    fn get_bg_tile_pos(&mut self, ly: u8) -> Point<u16> {
+        Point {
+            x: self.scroll_x.wrapping_add(self.scan_line_x) as u16,
+            y: self.scroll_y.wrapping_add(ly) as u16,
+        }
     }
 
     fn get_tile_data(&mut self, tiles: &TileData, lcd_ctrl: &LcdControlRegister) {
