@@ -4,7 +4,7 @@ pub mod debugger_app;
 mod asm_view;
 mod cpu_view;
 mod interrupts_view;
-mod io_registers_view;
+mod joypad_view;
 mod mbc_view;
 mod oam_view;
 mod palette_view;

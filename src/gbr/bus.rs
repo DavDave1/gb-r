@@ -3,8 +3,8 @@ use std::{fs, path::PathBuf};
 use byteorder::{ByteOrder, LittleEndian};
 
 use super::{
-    apu::APU, dma::DMA, interrupts::InterruptHandler, io_registers::IORegisters, mbc::MBC,
-    memory_map::*, oam::ObjAttributeMemory, ppu::PPU, serial::Serial, timer::Timer, GbError,
+    apu::APU, dma::DMA, interrupts::InterruptHandler, joypad::Joypad, mbc::MBC, memory_map::*,
+    oam::ObjAttributeMemory, ppu::PPU, serial::Serial, timer::Timer, GbError,
 };
 
 #[cfg(test)]
@@ -26,7 +26,6 @@ pub struct Bus {
     hram: Box<[u8]>,
     wram: Box<[u8]>,
     oam: ObjAttributeMemory,
-    io_registers: IORegisters,
     ppu: PPU,
     apu: APU,
     ir_handler: InterruptHandler,
@@ -34,6 +33,7 @@ pub struct Bus {
     mbc: MBC,
     dma: DMA,
     serial: Serial,
+    joypad: Joypad,
 }
 
 impl Bus {
@@ -56,7 +56,6 @@ impl Bus {
             hram: vec![0; HRAM_SIZE].into_boxed_slice(),
             wram: vec![0; WRAM_SIZE].into_boxed_slice(),
             oam: ObjAttributeMemory::new(),
-            io_registers: IORegisters::default(),
             ppu: PPU::new(),
             apu: APU::new(),
             ir_handler: InterruptHandler::default(),
@@ -64,6 +63,7 @@ impl Bus {
             mbc,
             dma: DMA::new(),
             serial: Serial::default(),
+            joypad: Joypad::default(),
         }
     }
 
@@ -78,15 +78,22 @@ impl Bus {
 
     pub fn reset(&mut self) {
         self.ppu.reset();
-        self.io_registers = IORegisters::default();
+        self.boot_rom_lock = true;
+        self.hram.fill(0);
+        self.wram.fill(0);
+        self.oam = ObjAttributeMemory::new();
+        self.apu = APU::new();
+        self.ir_handler = InterruptHandler::default();
+        self.timer = Timer::default();
+        self.dma = DMA::new();
+        self.serial = Serial::default();
+        self.joypad = Joypad::default();
+
+        // TODO reset MBC
     }
 
     pub fn ppu(&self) -> &PPU {
         &self.ppu
-    }
-
-    pub fn io_registers(&self) -> &IORegisters {
-        &self.io_registers
     }
 
     pub fn mbc(&self) -> &MBC {
@@ -95,6 +102,14 @@ impl Bus {
 
     pub fn oam(&self) -> &ObjAttributeMemory {
         &self.oam
+    }
+
+    pub fn joypad(&self) -> &Joypad {
+        &self.joypad
+    }
+
+    pub fn joypad_mut(&mut self) -> &mut Joypad {
+        &mut self.joypad
     }
 }
 
@@ -118,6 +133,7 @@ impl BusAccess for Bus {
                 log::warn!("Reading byte from unusable addr {:#06X}", addr);
                 Ok(0xFF)
             }
+            MappedAddress::JoypadRegister => Ok(self.joypad.read()),
             MappedAddress::SerialRegisters => self.serial.read(addr),
             MappedAddress::TimerRegisters(addr) => self.timer.read_reg(addr),
             MappedAddress::ApuRegisters(addr) => self.apu.read_reg(addr),
@@ -126,10 +142,10 @@ impl BusAccess for Bus {
             MappedAddress::BootRomLockRegister => Err(GbError::IllegalOp(
                 "reading from boot rom lock register".into(),
             )),
-            MappedAddress::IORegisters(addr) => self.io_registers.read(addr),
             MappedAddress::HighRam(addr) => Ok(self.hram[(addr - HRAM_START) as usize]),
             MappedAddress::InterruptFlagRegister => Ok(self.ir_handler.read_if()),
             MappedAddress::InterruptEnableRegister => Ok(self.ir_handler.read_ie()),
+            MappedAddress::InvalidAddress => Ok(0xFF),
         }
     }
 
@@ -145,16 +161,17 @@ impl BusAccess for Bus {
             MappedAddress::NotUsable(addr) => {
                 log::warn!("Writing byte {:#04X} to unusable addr {:#06X}", value, addr);
             }
+            MappedAddress::JoypadRegister => self.joypad.write(value),
             MappedAddress::SerialRegisters => self.serial.write(addr, value)?,
             MappedAddress::TimerRegisters(addr) => self.timer.write_reg(addr, value)?,
             MappedAddress::ApuRegisters(addr) => self.apu.write_reg(addr, value)?,
             MappedAddress::PpuRegisters(addr) => self.ppu.write_reg(addr, value)?,
             MappedAddress::DmaRegister => self.dma.write_reg(value),
             MappedAddress::BootRomLockRegister => self.boot_rom_lock = false,
-            MappedAddress::IORegisters(addr) => self.io_registers.write(addr, value)?,
             MappedAddress::HighRam(addr) => self.hram[(addr - HRAM_START) as usize] = value,
             MappedAddress::InterruptFlagRegister => self.ir_handler.write_if(value),
             MappedAddress::InterruptEnableRegister => self.ir_handler.write_ie(value),
+            MappedAddress::InvalidAddress => (),
         }
 
         Ok(())
@@ -181,6 +198,9 @@ impl BusAccess for Bus {
                 log::warn!("Reading word from unusable addr {:#06X}", addr);
                 Ok(0xFFFF)
             }
+            MappedAddress::JoypadRegister => {
+                Err(GbError::IllegalOp("read word from Joypad register".into()))
+            }
             MappedAddress::SerialRegisters => {
                 Err(GbError::IllegalOp("read word from Serial registers".into()))
             }
@@ -199,9 +219,7 @@ impl BusAccess for Bus {
             MappedAddress::BootRomLockRegister => Err(GbError::IllegalOp(
                 "reading from boot rom lock register".into(),
             )),
-            MappedAddress::IORegisters(_addr) => {
-                Err(GbError::Unimplemented("reading IO registers".into()))
-            }
+
             MappedAddress::HighRam(addr) => Ok(LittleEndian::read_u16(
                 &self.hram[(addr - HRAM_START) as usize..],
             )),
@@ -211,6 +229,7 @@ impl BusAccess for Bus {
             MappedAddress::InterruptEnableRegister => Err(GbError::IllegalOp(
                 "reading interrupt enable register".into(),
             )),
+            MappedAddress::InvalidAddress => Ok(0xFFFF),
         }
     }
 

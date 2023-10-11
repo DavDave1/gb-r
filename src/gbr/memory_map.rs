@@ -29,8 +29,7 @@ pub const OBJ_ATTRIBUTE_TABLE_SIZE: usize =
 const NOT_USABLE_RAM_START: u16 = 0xFEA0;
 const NOT_USABLE_RAM_END: u16 = 0xFEFF;
 
-pub const IO_REGISTERS_START: u16 = 0xFF00;
-const IO_REGISTERS_END: u16 = 0xFF7F;
+pub const JOYPAD_REGISTER_ADDR: u16 = 0xFF00;
 
 pub const SERIAL_REGISTERS_START: u16 = 0xFF01;
 const SERIAL_REGISTERS_END: u16 = 0xFF02;
@@ -64,7 +63,6 @@ pub enum MappedAddress {
     VideoRam(u16),
     CartRam(u16),
     WorkRam(u16),
-    //  EchoRam(u16),
     ObjectAttributeTable(u16),
     NotUsable(u16),
     TimerRegisters(u16),
@@ -72,11 +70,12 @@ pub enum MappedAddress {
     PpuRegisters(u16),
     DmaRegister,
     BootRomLockRegister,
+    JoypadRegister,
     SerialRegisters,
-    IORegisters(u16),
     HighRam(u16),
     InterruptFlagRegister,
     InterruptEnableRegister,
+    InvalidAddress,
 }
 
 pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
@@ -93,6 +92,7 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
             Ok(MappedAddress::ObjectAttributeTable(addr))
         }
         NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => Ok(MappedAddress::NotUsable(addr)),
+        JOYPAD_REGISTER_ADDR => Ok(MappedAddress::JoypadRegister),
         SERIAL_REGISTERS_START..=SERIAL_REGISTERS_END => Ok(MappedAddress::SerialRegisters),
         TIMER_REGISTERS_START..=TIMER_REGISTERS_END => Ok(MappedAddress::TimerRegisters(addr)),
         APU_REGISTERS_START..=APU_REGISTERS_END => Ok(MappedAddress::ApuRegisters(addr)),
@@ -101,9 +101,9 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
         PPU_REGISTERS_HIGH_START..=PPU_REGISTERS_HIGH_END => Ok(MappedAddress::PpuRegisters(addr)),
         BOOT_ROM_LOCK_REGISTER => Ok(MappedAddress::BootRomLockRegister),
         INTERRUPTS_FLAG_REGISTER => Ok(MappedAddress::InterruptFlagRegister),
-        IO_REGISTERS_START..=IO_REGISTERS_END => Ok(MappedAddress::IORegisters(addr)),
         HRAM_START..=HRAM_END => Ok(MappedAddress::HighRam(addr)),
         INTERRUPTS_ENABLE_REGISTER => Ok(MappedAddress::InterruptEnableRegister),
+        _ => Ok(MappedAddress::InvalidAddress),
     }
 }
 

@@ -6,7 +6,7 @@ pub mod dma;
 pub mod game_boy;
 pub mod instruction;
 pub mod interrupts;
-pub mod io_registers;
+pub mod joypad;
 pub mod mbc;
 pub mod memory_map;
 pub mod oam;

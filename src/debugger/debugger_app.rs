@@ -215,6 +215,7 @@ impl DebuggerApp {
                 }
 
                 if debugger.should_break(emu.cpu().read_pc()) {
+                    emu_state_sig.try_send(EmuState::Idle).ok();
                     running = false;
                 }
 

@@ -20,7 +20,7 @@ use super::palette_view::PaletteView;
 use super::tilemap_view::TilemapView;
 use super::tiles_view::TilesView;
 use super::{asm_view, cpu_view, mbc_view, oam_view};
-use super::{interrupts_view, io_registers_view};
+use super::{interrupts_view, joypad_view};
 
 struct UiState {
     show_bg_tilemap: bool,
@@ -167,7 +167,7 @@ impl UiState {
                 ui.vertical(|ui| {
                     cpu_view::show(&mut self.gb_state.cpu, ui);
                     ui.separator();
-                    io_registers_view::show(&self.gb_state.io_registers, ui);
+                    joypad_view::show(&self.gb_state.joypad, ui);
                     ui.separator();
                     interrupts_view::show(&mut self.gb_state.ir_handler, ui);
                     ui.separator();
