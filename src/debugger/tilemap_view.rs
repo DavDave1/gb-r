@@ -10,12 +10,7 @@ use crate::gbr::ppu::{
 const TILE_PER_ROW: usize = 32;
 const ROWS: usize = 32;
 
-fn create_image(
-    tilemap: &[u8],
-    tiles: &TileData,
-    palette: &Palette,
-    bg_tile_area: bool,
-) -> ColorImage {
+fn create_image(tilemap: &[u8], tiles: &TileData, bg_tile_area: bool) -> ColorImage {
     let pal = Palette::new(
         GrayShade::White,
         GrayShade::LightGray,
@@ -70,7 +65,6 @@ impl TilemapView {
         &mut self,
         tilemap: &[u8],
         tiles: &TileData,
-        palette: &Palette,
         bg_tile_area: bool,
         ui: &mut egui::Ui,
     ) {
@@ -78,12 +72,12 @@ impl TilemapView {
             None => {
                 self.texture = Some(ui.ctx().load_texture(
                     "tiles_view",
-                    create_image(tilemap, tiles, palette, bg_tile_area),
+                    create_image(tilemap, tiles, bg_tile_area),
                     egui::TextureOptions::default(),
                 ));
             }
             Some(tex_ref) => tex_ref.set(
-                create_image(tilemap, tiles, palette, bg_tile_area),
+                create_image(tilemap, tiles, bg_tile_area),
                 TextureOptions::default(),
             ),
         }

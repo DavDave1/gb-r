@@ -1,8 +1,6 @@
-use std::sync::mpsc::{channel, Sender};
+use std::collections::HashMap;
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime};
-
-use flume::Receiver;
 
 use pixels::{Pixels, SurfaceTexture};
 use winit::{
@@ -13,36 +11,73 @@ use winit::{
 };
 use winit_input_helper::WinitInputHelper;
 
-use super::{
-    debugger::{Debugger, DebuggerCommand},
-    ui::Ui,
-};
+use super::{debugger::Debugger, ui::Ui};
+use crate::gbr::game_boy::{self, GbrEvent, GenericInput, InputType};
+use crate::gbr::joypad::{Buttons, Directions};
 use crate::gbr::{game_boy::GameBoy, ppu};
 
-pub enum EmuState {
-    Idle,
-    Running,
-    Error,
+#[derive(Clone)]
+pub struct Settings {
+    keymap: HashMap<VirtualKeyCode, GenericInput>,
 }
 
-pub struct DebuggerApp {}
+impl Settings {
+    pub fn new() -> Self {
+        Self {
+            keymap: Settings::default_keymap(),
+        }
+    }
+
+    fn keymap(&self) -> &HashMap<VirtualKeyCode, GenericInput> {
+        &self.keymap
+    }
+
+    fn default_keymap() -> HashMap<VirtualKeyCode, GenericInput> {
+        let mut keymap = HashMap::new();
+
+        keymap.insert(VirtualKeyCode::A, GenericInput::Button(Buttons::A));
+        keymap.insert(VirtualKeyCode::Z, GenericInput::Button(Buttons::B));
+        keymap.insert(VirtualKeyCode::Space, GenericInput::Button(Buttons::Select));
+        keymap.insert(VirtualKeyCode::Return, GenericInput::Button(Buttons::Start));
+        keymap.insert(
+            VirtualKeyCode::Right,
+            GenericInput::Direction(Directions::Right),
+        );
+        keymap.insert(
+            VirtualKeyCode::Left,
+            GenericInput::Direction(Directions::Left),
+        );
+        keymap.insert(VirtualKeyCode::Up, GenericInput::Direction(Directions::Up));
+        keymap.insert(
+            VirtualKeyCode::Down,
+            GenericInput::Direction(Directions::Down),
+        );
+
+        keymap
+    }
+}
+
+pub struct DebuggerApp {
+    settings: Settings,
+}
 
 impl DebuggerApp {
     pub fn new() -> Self {
         env_logger::init();
 
-        Self {}
+        Self {
+            settings: Settings::new(),
+        }
     }
 
-    pub fn run(&self, game_boy: Arc<RwLock<GameBoy>>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run(&self, gb: Arc<RwLock<GameBoy>>) -> Result<(), Box<dyn std::error::Error>> {
         let debugger = Debugger::new();
 
-        let gb_state = debugger.gb_state.clone();
-        let asm_state = debugger.asm_state.clone();
+        let gb_state = debugger.gb_state_recv();
+        let asm_state = debugger.asm_state_recv();
+        let render_slot = gb.read().unwrap().ppu().render_watch();
 
-        let (cmd_sig, emu_state_slot) = DebuggerApp::start_emu_thread(game_boy.clone(), debugger);
-
-        let render_slot = game_boy.read().unwrap().ppu().render_watch();
+        let (ev_sender, emu_state_slot) = game_boy::start_gb_thread(gb, debugger);
 
         log::debug!("create window");
         let event_loop = EventLoop::new();
@@ -72,7 +107,7 @@ impl DebuggerApp {
         let mut ui = Ui::new(
             gb_state,
             asm_state,
-            cmd_sig,
+            ev_sender.clone(),
             emu_state_slot,
             &event_loop,
             width,
@@ -86,6 +121,8 @@ impl DebuggerApp {
 
         let mut input = WinitInputHelper::new();
 
+        let settings = self.settings.clone();
+
         event_loop.run(move |event, _, control_flow| {
             if input.update(&event) {
                 if input.key_pressed(VirtualKeyCode::Escape)
@@ -95,6 +132,8 @@ impl DebuggerApp {
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
+
+                DebuggerApp::send_key(&input, &ev_sender, &settings);
 
                 if let Some(scale_factor) = input.scale_factor() {
                     if scale_factor > 0.0 {
@@ -143,93 +182,18 @@ impl DebuggerApp {
         });
     }
 
-    fn start_emu_thread(
-        emu: Arc<RwLock<GameBoy>>,
-        mut debugger: Debugger,
-    ) -> (Sender<DebuggerCommand>, Receiver<EmuState>) {
-        let (cmd_sig, cmd_slot) = channel::<DebuggerCommand>();
-        let (emu_state_sig, emu_state_slot) = flume::bounded(1);
-
-        let frame_time = Duration::from_secs_f64(1.0 / 59.7);
-
-        std::thread::spawn(move || {
-            let mut emu = emu.write().unwrap();
-
-            let mut running = false;
-            let mut stepping = false;
-
-            let mut now = SystemTime::now();
-            loop {
-                {
-                    let mut state = debugger.gb_state.write().unwrap();
-                    *state = emu.collect_state();
-
-                    let mut asm = debugger.asm_state.write().unwrap();
-                    *asm = Debugger::disassemble(&emu);
-                }
-
-                let cmd = if !running {
-                    cmd_slot.recv().ok()
-                } else {
-                    cmd_slot.try_recv().ok()
-                };
-
-                match cmd {
-                    Some(DebuggerCommand::Run) => {
-                        emu_state_sig.try_send(EmuState::Running).ok();
-                        running = true;
-                    }
-                    Some(DebuggerCommand::Stop) => {
-                        emu_state_sig.try_send(EmuState::Idle).ok();
-                        emu.reset();
-                        running = false;
-                    }
-                    Some(DebuggerCommand::Pause) => {
-                        emu_state_sig.try_send(EmuState::Idle).ok();
-                        running = false;
-                    }
-                    Some(DebuggerCommand::SetBreakpoint(pc)) => {
-                        debugger.add_breakpoint(pc);
-                    }
-                    Some(DebuggerCommand::UnsetBreakpoint(pc)) => {
-                        debugger.remove_breakpoint(pc);
-                    }
-                    Some(DebuggerCommand::Step) => stepping = true,
-                    Some(DebuggerCommand::DumpVram) => log::info!("\n{}", emu.ppu().vram_dump()),
-                    None => (),
-                }
-
-                let mut vblank_ev = false;
-                if running || stepping {
-                    stepping = false;
-
-                    vblank_ev = match emu.step() {
-                        Err(e) => {
-                            log::error!("emu error: {}", e);
-                            emu_state_sig.try_send(EmuState::Error).ok();
-                            running = false;
-                            false
-                        }
-                        Ok(ev) => ev,
-                    };
-                }
-
-                if debugger.should_break(emu.cpu().read_pc()) {
-                    emu_state_sig.try_send(EmuState::Idle).ok();
-                    running = false;
-                }
-
-                if running && vblank_ev {
-                    let elapsed = SystemTime::now().duration_since(now).unwrap();
-                    now = SystemTime::now();
-
-                    if elapsed < frame_time {
-                        std::thread::sleep(frame_time - elapsed);
-                    }
-                }
+    fn send_key(input: &WinitInputHelper, ev_sender: &Sender<GbrEvent>, settings: &Settings) {
+        for (key, button) in settings.keymap() {
+            if input.key_pressed(*key) {
+                ev_sender
+                    .send(GbrEvent::Input(InputType::Pressed(button.clone())))
+                    .ok();
             }
-        });
-
-        (cmd_sig, emu_state_slot)
+            if input.key_released(*key) {
+                ev_sender
+                    .send(GbrEvent::Input(InputType::Released(button.clone())))
+                    .ok();
+            }
+        }
     }
 }

@@ -1,11 +1,9 @@
-use std::{
-    collections::HashSet,
-    sync::{Arc, RwLock, RwLockWriteGuard},
-};
+use std::{collections::HashSet, sync::RwLockWriteGuard};
 
 use enum_primitive::FromPrimitive;
+use flume::{Receiver, Sender};
 
-use crate::gbr::game_boy::{GameBoy, GbState};
+use crate::gbr::game_boy::{self, DebugEvent, GameBoy, GbState};
 use crate::gbr::{
     bus::BusAccess,
     instruction::{opcode::Opcode, Instruction},
@@ -14,41 +12,27 @@ use crate::gbr::{
 
 pub type AsmState = Vec<(u16, Option<Instruction>)>;
 
-pub enum DebuggerCommand {
-    Run,
-    Stop,
-    Pause,
-    Step,
-    SetBreakpoint(u16),
-    UnsetBreakpoint(u16),
-    DumpVram,
-}
-
 pub struct Debugger {
-    pub gb_state: Arc<RwLock<GbState>>,
-    pub asm_state: Arc<RwLock<AsmState>>,
+    gb_state: (Sender<GbState>, Receiver<GbState>),
+    asm_state: (Sender<AsmState>, Receiver<AsmState>),
     breakpoints: HashSet<u16>,
 }
 
 impl Debugger {
     pub fn new() -> Self {
         Debugger {
-            gb_state: Default::default(),
-            asm_state: Default::default(),
+            gb_state: flume::bounded(1),
+            asm_state: flume::bounded(1),
             breakpoints: HashSet::new(),
         }
     }
 
-    pub fn add_breakpoint(&mut self, pc: u16) {
-        self.breakpoints.insert(pc);
+    pub fn gb_state_recv(&self) -> Receiver<GbState> {
+        self.gb_state.1.clone()
     }
 
-    pub fn remove_breakpoint(&mut self, pc: u16) {
-        self.breakpoints.remove(&pc);
-    }
-
-    pub fn should_break(&self, pc: u16) -> bool {
-        self.breakpoints.contains(&pc)
+    pub fn asm_state_recv(&self) -> Receiver<AsmState> {
+        self.asm_state.1.clone()
     }
 
     fn fetch_instruction(pc: u16, bus: &dyn BusAccess) -> Result<Instruction, GbError> {
@@ -98,5 +82,28 @@ impl Debugger {
         }
 
         disassembly
+    }
+}
+
+impl game_boy::Debugger for Debugger {
+    fn handle_event(&mut self, emu: &RwLockWriteGuard<GameBoy>, ev: &game_boy::DebugEvent) {
+        match ev {
+            DebugEvent::SetBreakpoint(pc) => {
+                self.breakpoints.insert(*pc);
+            }
+            DebugEvent::ClearBreakpoint(pc) => {
+                self.breakpoints.remove(pc);
+            }
+            DebugEvent::DumpVram => log::info!("\n{}", emu.ppu().vram_dump()),
+        }
+    }
+
+    fn send_state(&mut self, gb: &RwLockWriteGuard<GameBoy>) {
+        self.gb_state.0.send(gb.collect_state()).ok();
+        self.asm_state.0.send(Debugger::disassemble(gb)).ok();
+    }
+
+    fn should_break(&self, gb: &RwLockWriteGuard<GameBoy>) -> bool {
+        self.breakpoints.contains(&gb.cpu().read_pc())
     }
 }

@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, RwLock};
 
 use egui::ClippedPrimitive;
 use egui::{Context, TexturesDelta, TopBottomPanel};
@@ -12,10 +11,9 @@ use pixels::PixelsContext;
 use winit::event_loop::EventLoopWindowTarget;
 use winit::{event::WindowEvent, window::Window};
 
-use crate::gbr::game_boy::GbState;
+use crate::gbr::game_boy::{DebugEvent, EmuState, GbState, GbrEvent};
 
-use super::debugger::{AsmState, DebuggerCommand};
-use super::debugger_app::EmuState;
+use super::debugger::AsmState;
 use super::palette_view::PaletteView;
 use super::tilemap_view::TilemapView;
 use super::tiles_view::TilesView;
@@ -25,11 +23,11 @@ use super::{interrupts_view, joypad_view};
 struct UiState {
     show_bg_tilemap: bool,
     show_win_tilemap: bool,
-    gb_state_next: Arc<RwLock<GbState>>,
+    gb_state_next: Receiver<GbState>,
     gb_state: GbState,
-    asm_state_next: Arc<RwLock<AsmState>>,
+    asm_state_next: Receiver<AsmState>,
     asm_state: AsmState,
-    cmd_sig: Sender<DebuggerCommand>,
+    ev_sender: Sender<GbrEvent>,
     tiles_view: TilesView,
     tilemap_views: [TilemapView; 2],
     palette_view: PaletteView,
@@ -40,9 +38,9 @@ struct UiState {
 
 impl UiState {
     fn new(
-        gb_state: Arc<RwLock<GbState>>,
-        asm_state: Arc<RwLock<AsmState>>,
-        cmd_sig: Sender<DebuggerCommand>,
+        gb_state: Receiver<GbState>,
+        asm_state: Receiver<AsmState>,
+        ev_sender: Sender<GbrEvent>,
         emu_state_slot: Receiver<EmuState>,
     ) -> Self {
         Self {
@@ -52,7 +50,7 @@ impl UiState {
             gb_state: GbState::default(),
             asm_state_next: asm_state,
             asm_state: AsmState::default(),
-            cmd_sig,
+            ev_sender,
             tiles_view: TilesView::default(),
             tilemap_views: Default::default(),
             palette_view: PaletteView::new(),
@@ -67,11 +65,11 @@ impl UiState {
             self.emu_state = state;
         }
 
-        if let Ok(state) = self.gb_state_next.try_read() {
+        if let Ok(state) = self.gb_state_next.try_recv() {
             self.gb_state = state.clone();
         }
 
-        if let Ok(state) = self.asm_state_next.try_read() {
+        if let Ok(state) = self.asm_state_next.try_recv() {
             self.asm_state = state.clone();
         }
     }
@@ -103,7 +101,6 @@ impl UiState {
                     self.tilemap_views[view_idx].show(
                         &self.gb_state.ppu.bg_tilemap,
                         &self.gb_state.ppu.tiles,
-                        &self.gb_state.ppu.bg_palette,
                         self.gb_state.ppu.lcd_control.bg_and_window_tile_area_sel,
                         ui,
                     );
@@ -118,7 +115,6 @@ impl UiState {
                     self.tilemap_views[view_idx].show(
                         &self.gb_state.ppu.win_tilemap,
                         &self.gb_state.ppu.tiles,
-                        &self.gb_state.ppu.bg_palette,
                         self.gb_state.ppu.lcd_control.bg_and_window_tile_area_sel,
                         ui,
                     );
@@ -130,33 +126,30 @@ impl UiState {
             .show(ctx, |ui| {
                 ui.horizontal_top(|ui| {
                     match self.emu_state {
-                        EmuState::Running => {
+                        EmuState::Running | EmuState::Error => {
                             if ui.button("Stop").clicked() {
-                                self.cmd_sig.send(DebuggerCommand::Stop).unwrap();
+                                self.ev_sender.send(GbrEvent::Stop).unwrap();
                             }
 
                             if ui.button("Pause").clicked() {
-                                self.cmd_sig.send(DebuggerCommand::Pause).unwrap();
+                                self.ev_sender.send(GbrEvent::Pause).unwrap();
                             }
                         }
                         EmuState::Idle => {
                             if ui.button("Start").clicked() {
-                                self.cmd_sig.send(DebuggerCommand::Run).unwrap();
+                                self.ev_sender.send(GbrEvent::Start).unwrap();
                             }
 
                             if ui.button("Step").clicked() {
-                                self.cmd_sig.send(DebuggerCommand::Step).unwrap();
-                            }
-                        }
-                        EmuState::Error => {
-                            if ui.button("Stop").clicked() {
-                                self.cmd_sig.send(DebuggerCommand::Stop).unwrap();
+                                self.ev_sender.send(GbrEvent::Step).unwrap();
                             }
                         }
                     }
 
                     if ui.button("Dump VRAM").clicked() {
-                        self.cmd_sig.send(DebuggerCommand::DumpVram).unwrap();
+                        self.ev_sender
+                            .send(GbrEvent::Debug(DebugEvent::DumpVram))
+                            .unwrap();
                     }
                 });
             });
@@ -174,7 +167,7 @@ impl UiState {
                     mbc_view::show(&mut self.gb_state.mbc, ui);
                     ui.separator();
                     asm_view::show(
-                        &self.cmd_sig,
+                        &self.ev_sender,
                         &self.asm_state,
                         &self.gb_state.cpu,
                         &mut self.breakpoints,
@@ -245,9 +238,9 @@ pub struct Ui {
 
 impl Ui {
     pub fn new<T>(
-        gb_state: Arc<RwLock<GbState>>,
-        asm_state: Arc<RwLock<AsmState>>,
-        cmd_sig: Sender<DebuggerCommand>,
+        gb_state: Receiver<GbState>,
+        asm_state: Receiver<AsmState>,
+        ev_sender: Sender<GbrEvent>,
         emu_state_slot: Receiver<EmuState>,
         event_loop: &EventLoopWindowTarget<T>,
         width: u32,
@@ -275,7 +268,7 @@ impl Ui {
             renderer,
             paint_jobs: vec![],
             textures: TexturesDelta::default(),
-            state: UiState::new(gb_state, asm_state, cmd_sig, emu_state_slot),
+            state: UiState::new(gb_state, asm_state, ev_sender, emu_state_slot),
         }
     }
 

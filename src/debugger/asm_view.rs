@@ -1,6 +1,9 @@
 use std::{collections::HashSet, sync::mpsc::Sender};
 
-use crate::{debugger::debugger::DebuggerCommand, gbr::cpu::CpuState};
+use crate::gbr::{
+    cpu::CpuState,
+    game_boy::{DebugEvent, GbrEvent},
+};
 
 use egui::{Label, Sense};
 use egui_extras::{Column, TableBuilder};
@@ -8,7 +11,7 @@ use egui_extras::{Column, TableBuilder};
 use super::debugger::AsmState;
 
 pub fn show(
-    cmd_sig: &Sender<DebuggerCommand>,
+    ev_sender: &Sender<GbrEvent>,
     asm: &AsmState,
     cpu: &CpuState,
     breakpoints: &mut HashSet<u16>,
@@ -38,7 +41,9 @@ pub fn show(
                                     .double_clicked()
                                 {
                                     breakpoints.remove(pc);
-                                    cmd_sig.send(DebuggerCommand::UnsetBreakpoint(*pc)).unwrap();
+                                    ev_sender
+                                        .send(GbrEvent::Debug(DebugEvent::SetBreakpoint(*pc)))
+                                        .unwrap();
                                 }
                             } else {
                                 if ui
@@ -46,7 +51,9 @@ pub fn show(
                                     .double_clicked()
                                 {
                                     breakpoints.insert(*pc);
-                                    cmd_sig.send(DebuggerCommand::SetBreakpoint(*pc)).unwrap();
+                                    ev_sender
+                                        .send(GbrEvent::Debug(DebugEvent::ClearBreakpoint(*pc)))
+                                        .unwrap();
                                 }
                             }
                         });
