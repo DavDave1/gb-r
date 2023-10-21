@@ -6,7 +6,7 @@ use crate::gbr::{
 use super::{
     lcd_control_register::LcdControlRegister,
     palette::Palette,
-    tile::{TileData, TILE_COLOR_ID},
+    tile::{TileData, TileMap, TILE_COLOR_ID},
     Point, MODE_2_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, TILEMAP_BLOCK1_START,
 };
 
@@ -96,6 +96,108 @@ impl PixelProcessor {
 
     pub fn finished(&self) -> bool {
         self.scan_line_x as u32 >= SCREEN_WIDTH
+    }
+
+    pub fn draw_line(
+        &mut self,
+        ly: u8,
+        viewport: &Point<u8>,
+        win_position: &Point<u8>,
+        lcd_ctrl: &LcdControlRegister,
+        oam: &ObjAttributeMemory,
+        tiles: &TileData,
+        tilemaps: &[TileMap],
+        bg_palette: &Palette,
+        obj_palettes: &[Palette],
+    ) -> u16 {
+        let mut fifo_line = vec![];
+        fifo_line.reserve(SCREEN_WIDTH as usize);
+
+        let is_win = lcd_ctrl.window_enable && win_position.y <= ly;
+
+        let mut tile_pos: Point<u16> = if is_win {
+            Point {
+                x: win_position.x as u16,
+                y: win_position.y.wrapping_add(ly) as u16,
+            }
+        } else {
+            Point {
+                x: viewport.x as u16,
+                y: viewport.y.wrapping_add(ly) as u16,
+            }
+        };
+
+        let tilemap_index = if (is_win && lcd_ctrl.window_tile_area_sel)
+            || (!is_win && lcd_ctrl.bg_tile_map_area_sel)
+        {
+            1
+        } else {
+            0
+        };
+
+        let map_line = tilemaps[tilemap_index].line(
+            tile_pos.y as usize,
+            tiles,
+            lcd_ctrl.bg_and_window_tile_area_sel,
+        );
+
+        let offset = if is_win { 0 } else { viewport.x as u8 };
+
+        for x in 0..SCREEN_WIDTH as u8 {
+            let i = x.wrapping_add(offset) as usize;
+            fifo_line.push(Pixel::new(map_line[i], 0, 0));
+        }
+
+        let objs = oam.get_objs_at_line(ly);
+        if lcd_ctrl.obj_enable {
+            for obj in objs.iter() {
+                let tile = &tiles.list()[obj.tile_index() as usize];
+                let line = tile.line((ly as i16 - obj.top()) as usize, obj.flip_y(), obj.flip_x());
+
+                let x_start = obj.left().max(0);
+
+                let x_end = obj.right().min(SCREEN_WIDTH as i16);
+
+                let tile_start = if obj.left() >= 0 {
+                    0
+                } else {
+                    -obj.left() as usize
+                };
+
+                for (tile_x, fifo_x) in (x_start as usize..x_end as usize).enumerate() {
+                    fifo_line[fifo_x].push_obj(
+                        line[tile_start + tile_x],
+                        obj.palette_id() as usize,
+                        obj.tile_index() as usize,
+                        obj.bg_win_prio(),
+                    );
+                }
+            }
+        }
+
+        for (x, pixel) in fifo_line.iter().enumerate() {
+            let screen_index = (ly as usize * SCREEN_WIDTH as usize + x) * 4;
+
+            let palette = if pixel.is_bg {
+                &bg_palette
+            } else {
+                &obj_palettes[pixel.palette_id]
+            };
+
+            self.screen_buffer[screen_index..screen_index + 4]
+                .copy_from_slice(&palette.rgba(pixel.color_id).rgba);
+
+            // if pixel.is_bg {
+            //     self.screen_buffer[screen_index..screen_index + 4]
+            //         .copy_from_slice(&palette.rgba(pixel.color_id).rgba);
+            // } else {
+            //     self.screen_buffer[screen_index..screen_index + 3]
+            //         .copy_from_slice(&TILE_COLOR_ID[pixel.tile_index]);
+            //     self.screen_buffer[screen_index + 3] = 0xFF;
+            // }
+        }
+
+        172
     }
 
     pub fn process(
@@ -210,8 +312,10 @@ impl PixelProcessor {
     }
 
     fn get_tile_data(&mut self, tiles: &TileData, lcd_ctrl: &LcdControlRegister) {
-        self.curr_tile_index = tiles
-            .tile_index_from_bg_map(self.curr_tile_index, lcd_ctrl.bg_and_window_tile_area_sel);
+        self.curr_tile_index = TileData::tile_index_from_bg_map(
+            self.curr_tile_index,
+            lcd_ctrl.bg_and_window_tile_area_sel,
+        );
     }
 
     fn push_bg(&mut self, tiles: &TileData) {
@@ -242,7 +346,7 @@ impl PixelProcessor {
             }
 
             let tile = &tiles.list()[obj.tile_index() as usize];
-            let line = tile.pixels[(ly as i16 - obj.top()) as usize];
+            let line = tile.line((ly as i16 - obj.top()) as usize, obj.flip_y(), obj.flip_x());
 
             let x_start = 0.max(obj.left() - self.scan_line_x as i16);
 

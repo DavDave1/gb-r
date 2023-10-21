@@ -73,7 +73,8 @@ impl Bus {
         self.timer.step(cycles, &mut self.ir_handler);
         self.serial.step(cycles, &mut self.ir_handler);
         self.apu.step(cycles)?;
-        self.ppu.step(&mut self.ir_handler, &self.oam, cycles)
+        self.ppu
+            .step(&mut self.ir_handler, &self.oam, cycles as u16)
     }
 
     pub fn reset(&mut self) {

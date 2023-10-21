@@ -1,6 +1,9 @@
 use random_color::RandomColor;
 
-use super::{TILE_BLOCK_SIZE, TILE_DATA_SIZE, TILE_HEIGHT, TILE_WIDTH};
+use super::{
+    TILE_BLOCK_SIZE, TILE_DATA_SIZE, TILE_HEIGHT, TILE_MAP_DATA_COLS, TILE_MAP_DATA_ROWS,
+    TILE_WIDTH,
+};
 
 lazy_static! {
     pub static ref TILE_COLOR_ID: Vec<[u8; 3]> = {
@@ -57,6 +60,22 @@ impl Tile {
             self.pixels[line_index][x] = color_id;
         }
     }
+
+    pub fn line(&self, line_index: usize, flip_y: bool, flip_x: bool) -> [u8; TILE_WIDTH as usize] {
+        let index = if flip_y {
+            TILE_HEIGHT as usize - line_index
+        } else {
+            line_index
+        };
+
+        let mut line = self.pixels[index].clone();
+
+        if flip_x {
+            line.reverse();
+        }
+
+        line
+    }
 }
 
 #[derive(Default, Clone)]
@@ -79,7 +98,7 @@ impl TileData {
         &self.tiles
     }
 
-    pub fn tile_index_from_bg_map(&self, index: usize, tile_area_select: bool) -> usize {
+    pub fn tile_index_from_bg_map(index: usize, tile_area_select: bool) -> usize {
         if tile_area_select {
             return index;
         } else if index < 128 {
@@ -94,5 +113,41 @@ impl TileData {
         let line_index = (addr as usize % TILE_DATA_SIZE) / 2;
 
         self.tiles[index].decode_line(line_index, msb, lsb);
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct TileMap {
+    data: [[u8; TILE_MAP_DATA_COLS]; TILE_MAP_DATA_ROWS],
+}
+
+impl TileMap {
+    pub fn at(&self, r: usize, c: usize) -> u8 {
+        self.data[r][c]
+    }
+
+    pub fn set(&mut self, addr: u16, value: u8) {
+        let r = addr as usize / TILE_MAP_DATA_ROWS;
+        let c = addr as usize % TILE_MAP_DATA_COLS;
+
+        self.data[r][c] = value;
+    }
+
+    pub fn line(&self, line_index: usize, tiles: &TileData, tile_area_select: bool) -> [u8; 256] {
+        let mut line = [0; 256];
+
+        let row = line_index / TILE_HEIGHT as usize;
+        let tile_line = line_index % TILE_HEIGHT as usize;
+
+        for col in 0..TILE_MAP_DATA_COLS {
+            let tile_index =
+                TileData::tile_index_from_bg_map(self.data[row][col] as usize, tile_area_select);
+            let tile = &tiles.list()[tile_index];
+
+            line[col * TILE_WIDTH as usize..8 + col * TILE_WIDTH as usize]
+                .copy_from_slice(&tile.line(tile_line, false, false));
+        }
+
+        line
     }
 }

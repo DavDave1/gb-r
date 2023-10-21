@@ -13,7 +13,7 @@ use self::{
     palette::Palette,
     pixel_processor::PixelProcessor,
     rgba::Rgba,
-    tile::TileData,
+    tile::{TileData, TileMap},
 };
 use crate::gbr::{
     memory_map::{VRAM_SIZE, VRAM_START},
@@ -29,7 +29,9 @@ use super::{
 const TILE_BLOCK2_END: u16 = 0x17FF;
 
 const TILEMAP_BLOCK0_START: u16 = 0x9800 - VRAM_START;
+const TILEMAP_BLOCK0_END: u16 = 0x9BFF - VRAM_START;
 const TILEMAP_BLOCK1_START: u16 = 0x9C00 - VRAM_START;
+const TILEMAP_BLOCK1_END: u16 = 0x9FFF - VRAM_START;
 
 pub const SCREEN_WIDTH: u32 = 160;
 pub const SCREEN_HEIGHT: u32 = 144;
@@ -37,6 +39,8 @@ pub const SCREEN_HEIGHT: u32 = 144;
 pub const TILE_WIDTH: u32 = 8;
 pub const TILE_HEIGHT: u32 = 8;
 const TILE_DATA_SIZE: usize = 16;
+const TILE_MAP_DATA_ROWS: usize = 32;
+const TILE_MAP_DATA_COLS: usize = 32;
 
 pub const TILE_BLOCK_SIZE: usize = 128;
 
@@ -94,8 +98,10 @@ pub struct PPU {
     viewport: Point<u8>,
     win_pos: Point<u8>,
     tiles: TileData,
+    tilemaps: [TileMap; 2],
     render_ch: (flume::Sender<ScreenBuffer>, flume::Receiver<ScreenBuffer>),
     dots: u16,
+    mode_3_dots: u16,
     pixel_processor: PixelProcessor,
 }
 
@@ -112,8 +118,10 @@ impl PPU {
             viewport: Point::default(),
             win_pos: Point::default(),
             tiles: TileData::new(),
+            tilemaps: Default::default(),
             render_ch: flume::bounded(1),
             dots: 0,
+            mode_3_dots: 0,
             pixel_processor: PixelProcessor::new(),
         }
     }
@@ -136,13 +144,13 @@ impl PPU {
         &mut self,
         ir_handler: &mut InterruptHandler,
         oam: &ObjAttributeMemory,
-        cpu_cycles: u8,
+        cpu_cycles: u16,
     ) -> Result<bool, GbError> {
         if !self.lcd_control.display_enable {
             return Ok(false);
         }
 
-        self.dots += cpu_cycles as u16;
+        self.dots += cpu_cycles;
 
         if self.dots > DOTS_PER_LINE {
             if self.lcd_status.mode.get() != ScreenMode::HBlank
@@ -167,21 +175,39 @@ impl PPU {
             self.lcd_status.mode.set(ScreenMode::VBlank);
         } else if self.dots <= MODE_2_DOTS {
             self.lcd_status.mode.set(ScreenMode::SreachingOAM);
-        } else if self.lcd_status.mode.get() == ScreenMode::SreachingOAM {
-            self.pixel_processor.start(oam, self.ly, &self.viewport);
+        } else if self.lcd_status.mode.get() == ScreenMode::SreachingOAM && self.mode_3_dots == 0 {
             self.lcd_status.mode.set(ScreenMode::TransferringData);
-        } else if !self.pixel_processor.finished() {
-            self.pixel_processor.process(
+            // self.pixel_processor.start(oam, self.ly, &self.viewport);
+            self.mode_3_dots = self.pixel_processor.draw_line(
                 self.ly,
-                self.dots,
                 &self.viewport,
                 &self.win_pos,
                 &self.lcd_control,
-                &self.vram,
+                oam,
                 &self.tiles,
+                &self.tilemaps,
                 &self.bg_palette,
                 &self.obj_palettes,
             );
+        } else if self.lcd_status.mode.get() == ScreenMode::TransferringData && self.mode_3_dots > 0
+        {
+            if self.mode_3_dots < cpu_cycles {
+                self.mode_3_dots = 0;
+            } else {
+                self.mode_3_dots -= cpu_cycles;
+            }
+            // self.pixel_processor.process(
+            //     self.ly,
+            //     self.dots,
+            //     &self.viewport,
+            //     &self.win_pos,
+            //     &self.lcd_control,
+            //     &self.vram,
+            //     &self.tiles,
+            //     &self.tilemaps,
+            //     &self.bg_palette,
+            //     &self.obj_palettes,
+            // );
             if self.dots > MODE_3_DOTS_MAX {
                 log::error!("mode 3 out of bounds {}", self.dots);
             }
@@ -230,16 +256,25 @@ impl PPU {
 
         self.vram[local_addr] = value;
 
-        if local_addr <= TILE_BLOCK2_END as usize {
-            let is_lsb = local_addr % 2 == 0;
+        match local_addr as u16 {
+            0..=TILE_BLOCK2_END => {
+                let is_lsb = local_addr % 2 == 0;
 
-            if is_lsb {
-                self.tiles
-                    .write_line(local_addr, self.vram[local_addr + 1], value);
-            } else {
-                self.tiles
-                    .write_line(local_addr, value, self.vram[local_addr - 1]);
+                if is_lsb {
+                    self.tiles
+                        .write_line(local_addr, self.vram[local_addr + 1], value);
+                } else {
+                    self.tiles
+                        .write_line(local_addr, value, self.vram[local_addr - 1]);
+                }
             }
+            TILEMAP_BLOCK0_START..=TILEMAP_BLOCK0_END => {
+                self.tilemaps[0].set(local_addr as u16 - TILEMAP_BLOCK0_START, value)
+            }
+            TILEMAP_BLOCK1_START..=TILEMAP_BLOCK1_END => {
+                self.tilemaps[1].set(local_addr as u16 - TILEMAP_BLOCK1_START, value)
+            }
+            _ => (),
         }
 
         Ok(())

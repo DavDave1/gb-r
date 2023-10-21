@@ -29,7 +29,7 @@ fn create_image(tilemap: &[u8], tiles: &TileData, bg_tile_area: bool) -> ColorIm
 
         let mut tile_region = img.sub_image(x, y, TILE_WIDTH, TILE_HEIGHT);
 
-        let tile = tiles.list()[tiles.tile_index_from_bg_map(*tile_id as usize, bg_tile_area)];
+        let tile = tiles.list()[TileData::tile_index_from_bg_map(*tile_id as usize, bg_tile_area)];
 
         for r in 0..TILE_HEIGHT as usize {
             for c in 0..TILE_WIDTH as usize {
