@@ -65,7 +65,10 @@ impl APU {
 
     pub fn read_reg(&self, addr: u16) -> Result<u8, GbError> {
         match addr {
+            CH1_WAVE_AND_TIMER_REG_ADDR => Ok(self.ch1.read_duty_cycle()),
+            CH2_WAVE_AND_TIMER_REG_ADDR => Ok(self.ch2.read_duty_cycle()),
             OUTPUT_SELECT_REG_ADDR => Ok(self.sound_output_terminal_selection),
+            VOLUME_CTRL_REG_ADDR => Ok(self.sound_channel_volume_control),
             _ => Err(GbError::IllegalOp(format!(
                 "Read from invalid APU reg {:#06X}",
                 addr

@@ -7,7 +7,7 @@ enum SweepDirection {
     Decrease,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 enum DutyCycle {
     #[default]
     OneToEight,
@@ -92,7 +92,7 @@ impl Envelope {
 
 #[derive(Default)]
 pub struct Pulse {
-    duty_cylce: DutyCycle,
+    duty_cycle: DutyCycle,
     length_timer: u8,
     envelope: Envelope,
     period: u16,
@@ -100,8 +100,12 @@ pub struct Pulse {
 
 impl Pulse {
     pub fn write_wave_and_timer(&mut self, value: u8) {
-        self.duty_cylce = (value & 0b00000011).into();
+        self.duty_cycle = (value & 0b00000011).into();
         self.length_timer = value & 0b11111100;
+    }
+
+    pub fn read_duty_cycle(&self) -> u8 {
+        (self.duty_cycle as u8) << 5
     }
 
     pub fn write_period_low(&mut self, period_low: u8) {
@@ -185,6 +189,10 @@ impl Channel1 {
         self.pulse.write_period_high(value);
         self.ctrl.write(value);
     }
+
+    pub fn read_duty_cycle(&self) -> u8 {
+        self.pulse.read_duty_cycle()
+    }
 }
 
 #[derive(Default)]
@@ -209,6 +217,10 @@ impl Channel2 {
     pub fn write_period_high_and_ctrl(&mut self, value: u8) {
         self.pulse.write_period_high(value);
         self.ctrl.write(value);
+    }
+
+    pub fn read_duty_cycle(&self) -> u8 {
+        self.pulse.read_duty_cycle()
     }
 }
 
