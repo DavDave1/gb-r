@@ -127,6 +127,7 @@ impl BusAccess for Bus {
             MappedAddress::VideoRam(addr) => self.ppu.read_byte(addr),
             MappedAddress::CartRam(addr) => self.mbc.read_byte(addr),
             MappedAddress::WorkRam(addr) => Ok(self.wram[(addr - WRAM_START) as usize]),
+            MappedAddress::EchoRam => Ok(self.wram[(addr - ECHO_RAM_START) as usize]),
             MappedAddress::ObjectAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading object attribute table".into(),
             )),
@@ -158,6 +159,12 @@ impl BusAccess for Bus {
             MappedAddress::WorkRam(addr) => {
                 self.wram[(addr - WRAM_START) as usize] = value;
             }
+            MappedAddress::EchoRam => {
+                return Err(GbError::IllegalOp(format!(
+                    "Write to echo ram addr {:#06X}",
+                    addr
+                )));
+            }
             MappedAddress::ObjectAttributeTable(addr) => self.oam.write_byte(addr, value)?,
             MappedAddress::NotUsable(addr) => {
                 log::warn!("Writing byte {:#04X} to unusable addr {:#06X}", value, addr);
@@ -188,9 +195,12 @@ impl BusAccess for Bus {
                 }
             }
             MappedAddress::VideoRam(addr) => self.ppu.read_word(addr),
-            MappedAddress::CartRam(_addr) => self.mbc.read_word(addr),
-            MappedAddress::WorkRam(_addr) => Ok(LittleEndian::read_u16(
+            MappedAddress::CartRam(addr) => self.mbc.read_word(addr),
+            MappedAddress::WorkRam(addr) => Ok(LittleEndian::read_u16(
                 &self.wram[(addr - WRAM_START) as usize..],
+            )),
+            MappedAddress::EchoRam => Ok(LittleEndian::read_u16(
+                &self.wram[(addr - ECHO_RAM_START) as usize..],
             )),
             MappedAddress::ObjectAttributeTable(_addr) => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),

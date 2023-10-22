@@ -18,7 +18,7 @@ pub const WRAM_START: u16 = 0xC000;
 pub const WRAM_END: u16 = 0xDFFF;
 pub const WRAM_SIZE: usize = (WRAM_END - WRAM_START + 1) as usize;
 
-const ECHO_RAM_START: u16 = 0xE000;
+pub const ECHO_RAM_START: u16 = 0xE000;
 const ECHO_RAM_END: u16 = 0xFDFF;
 
 pub const OBJ_ATTRIBUTE_TABLE_START: u16 = 0xFE00;
@@ -63,6 +63,7 @@ pub enum MappedAddress {
     VideoRam(u16),
     CartRam(u16),
     WorkRam(u16),
+    EchoRam,
     ObjectAttributeTable(u16),
     NotUsable(u16),
     TimerRegisters(u16),
@@ -84,10 +85,7 @@ pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
         VRAM_START..=VRAM_END => Ok(MappedAddress::VideoRam(addr)),
         CART_RAM_START..=CART_RAM_END => Ok(MappedAddress::CartRam(addr)),
         WRAM_START..=WRAM_END => Ok(MappedAddress::WorkRam(addr)),
-        ECHO_RAM_START..=ECHO_RAM_END => Err(GbError::IllegalOp(format!(
-            "access to echo RAM {:#06X}",
-            addr
-        ))),
+        ECHO_RAM_START..=ECHO_RAM_END => Ok(MappedAddress::EchoRam),
         OBJ_ATTRIBUTE_TABLE_START..=OBJ_ATTRIBUTE_TABLE_END => {
             Ok(MappedAddress::ObjectAttributeTable(addr))
         }
