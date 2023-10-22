@@ -116,35 +116,35 @@ impl Bus {
 
 impl BusAccess for Bus {
     fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
-        match map_address(addr)? {
-            MappedAddress::CartRom(addr) => {
+        match map_address(addr) {
+            MappedAddress::CartRom => {
                 if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
                     Ok(self.boot_rom[addr as usize])
                 } else {
                     Ok(self.mbc.read_byte(addr)?)
                 }
             }
-            MappedAddress::VideoRam(addr) => self.ppu.read_byte(addr),
-            MappedAddress::CartRam(addr) => self.mbc.read_byte(addr),
-            MappedAddress::WorkRam(addr) => Ok(self.wram[(addr - WRAM_START) as usize]),
+            MappedAddress::VideoRam => self.ppu.read_byte(addr),
+            MappedAddress::CartRam => self.mbc.read_byte(addr),
+            MappedAddress::WorkRam => Ok(self.wram[(addr - WRAM_START) as usize]),
             MappedAddress::EchoRam => Ok(self.wram[(addr - ECHO_RAM_START) as usize]),
-            MappedAddress::ObjectAttributeTable(_addr) => Err(GbError::Unimplemented(
+            MappedAddress::ObjectAttributeTable => Err(GbError::Unimplemented(
                 "reading object attribute table".into(),
             )),
-            MappedAddress::NotUsable(addr) => {
+            MappedAddress::NotUsable => {
                 log::warn!("Reading byte from unusable addr {:#06X}", addr);
                 Ok(0xFF)
             }
             MappedAddress::JoypadRegister => Ok(self.joypad.read()),
             MappedAddress::SerialRegisters => self.serial.read(addr),
-            MappedAddress::TimerRegisters(addr) => self.timer.read_reg(addr),
-            MappedAddress::ApuRegisters(addr) => self.apu.read_reg(addr),
-            MappedAddress::PpuRegisters(addr) => self.ppu.read_reg(addr),
+            MappedAddress::TimerRegisters => self.timer.read_reg(addr),
+            MappedAddress::ApuRegisters => self.apu.read_reg(addr),
+            MappedAddress::PpuRegisters => self.ppu.read_reg(addr),
             MappedAddress::DmaRegister => Ok(self.dma.read_reg()),
             MappedAddress::BootRomLockRegister => Err(GbError::IllegalOp(
                 "reading from boot rom lock register".into(),
             )),
-            MappedAddress::HighRam(addr) => Ok(self.hram[(addr - HRAM_START) as usize]),
+            MappedAddress::HighRam => Ok(self.hram[(addr - HRAM_START) as usize]),
             MappedAddress::InterruptFlagRegister => Ok(self.ir_handler.read_if()),
             MappedAddress::InterruptEnableRegister => Ok(self.ir_handler.read_ie()),
             MappedAddress::InvalidAddress => Ok(0xFF),
@@ -152,11 +152,11 @@ impl BusAccess for Bus {
     }
 
     fn write_byte(&mut self, addr: u16, value: u8) -> Result<(), GbError> {
-        match map_address(addr)? {
-            MappedAddress::CartRom(addr) => self.mbc.write_byte(addr, value)?,
-            MappedAddress::VideoRam(addr) => self.ppu.write_byte(addr, value)?,
-            MappedAddress::CartRam(addr) => self.mbc.write_byte(addr, value)?,
-            MappedAddress::WorkRam(addr) => {
+        match map_address(addr) {
+            MappedAddress::CartRom => self.mbc.write_byte(addr, value)?,
+            MappedAddress::VideoRam => self.ppu.write_byte(addr, value)?,
+            MappedAddress::CartRam => self.mbc.write_byte(addr, value)?,
+            MappedAddress::WorkRam => {
                 self.wram[(addr - WRAM_START) as usize] = value;
             }
             MappedAddress::EchoRam => {
@@ -165,18 +165,18 @@ impl BusAccess for Bus {
                     addr
                 )));
             }
-            MappedAddress::ObjectAttributeTable(addr) => self.oam.write_byte(addr, value)?,
-            MappedAddress::NotUsable(addr) => {
+            MappedAddress::ObjectAttributeTable => self.oam.write_byte(addr, value)?,
+            MappedAddress::NotUsable => {
                 log::warn!("Writing byte {:#04X} to unusable addr {:#06X}", value, addr);
             }
             MappedAddress::JoypadRegister => self.joypad.write(value),
             MappedAddress::SerialRegisters => self.serial.write(addr, value)?,
-            MappedAddress::TimerRegisters(addr) => self.timer.write_reg(addr, value)?,
-            MappedAddress::ApuRegisters(addr) => self.apu.write_reg(addr, value)?,
-            MappedAddress::PpuRegisters(addr) => self.ppu.write_reg(addr, value)?,
+            MappedAddress::TimerRegisters => self.timer.write_reg(addr, value)?,
+            MappedAddress::ApuRegisters => self.apu.write_reg(addr, value)?,
+            MappedAddress::PpuRegisters => self.ppu.write_reg(addr, value)?,
             MappedAddress::DmaRegister => self.dma.write_reg(value),
             MappedAddress::BootRomLockRegister => self.boot_rom_lock = false,
-            MappedAddress::HighRam(addr) => self.hram[(addr - HRAM_START) as usize] = value,
+            MappedAddress::HighRam => self.hram[(addr - HRAM_START) as usize] = value,
             MappedAddress::InterruptFlagRegister => self.ir_handler.write_if(value),
             MappedAddress::InterruptEnableRegister => self.ir_handler.write_ie(value),
             MappedAddress::InvalidAddress => (),
@@ -186,26 +186,26 @@ impl BusAccess for Bus {
     }
 
     fn read_word(&self, addr: u16) -> Result<u16, GbError> {
-        match map_address(addr)? {
-            MappedAddress::CartRom(addr) => {
+        match map_address(addr) {
+            MappedAddress::CartRom => {
                 if self.boot_rom_lock && (addr as usize) < BOOT_ROM_SIZE {
                     Ok(LittleEndian::read_u16(&self.boot_rom[addr as usize..]))
                 } else {
                     self.mbc.read_word(addr)
                 }
             }
-            MappedAddress::VideoRam(addr) => self.ppu.read_word(addr),
-            MappedAddress::CartRam(addr) => self.mbc.read_word(addr),
-            MappedAddress::WorkRam(addr) => Ok(LittleEndian::read_u16(
+            MappedAddress::VideoRam => self.ppu.read_word(addr),
+            MappedAddress::CartRam => self.mbc.read_word(addr),
+            MappedAddress::WorkRam => Ok(LittleEndian::read_u16(
                 &self.wram[(addr - WRAM_START) as usize..],
             )),
             MappedAddress::EchoRam => Ok(LittleEndian::read_u16(
                 &self.wram[(addr - ECHO_RAM_START) as usize..],
             )),
-            MappedAddress::ObjectAttributeTable(_addr) => Err(GbError::Unimplemented(
+            MappedAddress::ObjectAttributeTable => Err(GbError::Unimplemented(
                 "reading sprite attribute table".into(),
             )),
-            MappedAddress::NotUsable(addr) => {
+            MappedAddress::NotUsable => {
                 log::warn!("Reading word from unusable addr {:#06X}", addr);
                 Ok(0xFFFF)
             }
@@ -215,13 +215,13 @@ impl BusAccess for Bus {
             MappedAddress::SerialRegisters => {
                 Err(GbError::IllegalOp("read word from Serial registers".into()))
             }
-            MappedAddress::TimerRegisters(_addr) => {
+            MappedAddress::TimerRegisters => {
                 Err(GbError::IllegalOp("read word from Timer registers".into()))
             }
-            MappedAddress::ApuRegisters(_addr) => {
+            MappedAddress::ApuRegisters => {
                 Err(GbError::IllegalOp("read word from APU registers".into()))
             }
-            MappedAddress::PpuRegisters(_addr) => {
+            MappedAddress::PpuRegisters => {
                 Err(GbError::IllegalOp("read word from PPU registers".into()))
             }
             MappedAddress::DmaRegister => {
@@ -231,7 +231,7 @@ impl BusAccess for Bus {
                 "reading from boot rom lock register".into(),
             )),
 
-            MappedAddress::HighRam(addr) => Ok(LittleEndian::read_u16(
+            MappedAddress::HighRam => Ok(LittleEndian::read_u16(
                 &self.hram[(addr - HRAM_START) as usize..],
             )),
             MappedAddress::InterruptFlagRegister => {

@@ -1,5 +1,3 @@
-use crate::gbr::GbError;
-
 pub const BOOT_ROM_SIZE: usize = 0x100;
 
 pub const CART_ROM_BANK0_START: u16 = 0x0000;
@@ -59,49 +57,47 @@ pub const HRAM_SIZE: usize = (HRAM_END - HRAM_START + 1) as usize;
 
 #[derive(Debug, PartialEq)]
 pub enum MappedAddress {
-    CartRom(u16),
-    VideoRam(u16),
-    CartRam(u16),
-    WorkRam(u16),
+    CartRom,
+    VideoRam,
+    CartRam,
+    WorkRam,
     EchoRam,
-    ObjectAttributeTable(u16),
-    NotUsable(u16),
-    TimerRegisters(u16),
-    ApuRegisters(u16),
-    PpuRegisters(u16),
+    ObjectAttributeTable,
+    NotUsable,
+    TimerRegisters,
+    ApuRegisters,
+    PpuRegisters,
     DmaRegister,
     BootRomLockRegister,
     JoypadRegister,
     SerialRegisters,
-    HighRam(u16),
+    HighRam,
     InterruptFlagRegister,
     InterruptEnableRegister,
     InvalidAddress,
 }
 
-pub fn map_address(addr: u16) -> Result<MappedAddress, GbError> {
+pub fn map_address(addr: u16) -> MappedAddress {
     match addr {
-        CART_ROM_BANK0_START..=CART_ROM_ACTIVE_BANK_END => Ok(MappedAddress::CartRom(addr)),
-        VRAM_START..=VRAM_END => Ok(MappedAddress::VideoRam(addr)),
-        CART_RAM_START..=CART_RAM_END => Ok(MappedAddress::CartRam(addr)),
-        WRAM_START..=WRAM_END => Ok(MappedAddress::WorkRam(addr)),
-        ECHO_RAM_START..=ECHO_RAM_END => Ok(MappedAddress::EchoRam),
-        OBJ_ATTRIBUTE_TABLE_START..=OBJ_ATTRIBUTE_TABLE_END => {
-            Ok(MappedAddress::ObjectAttributeTable(addr))
-        }
-        NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => Ok(MappedAddress::NotUsable(addr)),
-        JOYPAD_REGISTER_ADDR => Ok(MappedAddress::JoypadRegister),
-        SERIAL_REGISTERS_START..=SERIAL_REGISTERS_END => Ok(MappedAddress::SerialRegisters),
-        TIMER_REGISTERS_START..=TIMER_REGISTERS_END => Ok(MappedAddress::TimerRegisters(addr)),
-        APU_REGISTERS_START..=APU_REGISTERS_END => Ok(MappedAddress::ApuRegisters(addr)),
-        PPU_REGISTERS_LOW_START..=PPU_REGISTERS_LOW_END => Ok(MappedAddress::PpuRegisters(addr)),
-        DMA_REGISTER => Ok(MappedAddress::DmaRegister),
-        PPU_REGISTERS_HIGH_START..=PPU_REGISTERS_HIGH_END => Ok(MappedAddress::PpuRegisters(addr)),
-        BOOT_ROM_LOCK_REGISTER => Ok(MappedAddress::BootRomLockRegister),
-        INTERRUPTS_FLAG_REGISTER => Ok(MappedAddress::InterruptFlagRegister),
-        HRAM_START..=HRAM_END => Ok(MappedAddress::HighRam(addr)),
-        INTERRUPTS_ENABLE_REGISTER => Ok(MappedAddress::InterruptEnableRegister),
-        _ => Ok(MappedAddress::InvalidAddress),
+        CART_ROM_BANK0_START..=CART_ROM_ACTIVE_BANK_END => MappedAddress::CartRom,
+        VRAM_START..=VRAM_END => MappedAddress::VideoRam,
+        CART_RAM_START..=CART_RAM_END => MappedAddress::CartRam,
+        WRAM_START..=WRAM_END => MappedAddress::WorkRam,
+        ECHO_RAM_START..=ECHO_RAM_END => MappedAddress::EchoRam,
+        OBJ_ATTRIBUTE_TABLE_START..=OBJ_ATTRIBUTE_TABLE_END => MappedAddress::ObjectAttributeTable,
+        NOT_USABLE_RAM_START..=NOT_USABLE_RAM_END => MappedAddress::NotUsable,
+        JOYPAD_REGISTER_ADDR => MappedAddress::JoypadRegister,
+        SERIAL_REGISTERS_START..=SERIAL_REGISTERS_END => MappedAddress::SerialRegisters,
+        TIMER_REGISTERS_START..=TIMER_REGISTERS_END => MappedAddress::TimerRegisters,
+        APU_REGISTERS_START..=APU_REGISTERS_END => MappedAddress::ApuRegisters,
+        PPU_REGISTERS_LOW_START..=PPU_REGISTERS_LOW_END => MappedAddress::PpuRegisters,
+        DMA_REGISTER => MappedAddress::DmaRegister,
+        PPU_REGISTERS_HIGH_START..=PPU_REGISTERS_HIGH_END => MappedAddress::PpuRegisters,
+        BOOT_ROM_LOCK_REGISTER => MappedAddress::BootRomLockRegister,
+        INTERRUPTS_FLAG_REGISTER => MappedAddress::InterruptFlagRegister,
+        HRAM_START..=HRAM_END => MappedAddress::HighRam,
+        INTERRUPTS_ENABLE_REGISTER => MappedAddress::InterruptEnableRegister,
+        _ => MappedAddress::InvalidAddress,
     }
 }
 
@@ -113,8 +109,6 @@ mod tests {
 
     #[test]
     fn wram_mapping() {
-        let mapped = map_address(0xC000).unwrap();
-
-        assert_eq!(mapped, MappedAddress::WorkRam(0xC000));
+        assert_eq!(map_address(0xC000), MappedAddress::WorkRam);
     }
 }
