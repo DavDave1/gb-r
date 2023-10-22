@@ -115,7 +115,7 @@ impl PixelProcessor {
 
         let is_win = lcd_ctrl.window_enable && win_position.y <= ly;
 
-        let mut tile_pos: Point<u16> = if is_win {
+        let tile_pos: Point<u16> = if is_win {
             Point {
                 x: win_position.x as u16,
                 y: win_position.y.wrapping_add(ly) as u16,
@@ -197,7 +197,7 @@ impl PixelProcessor {
             // }
         }
 
-        172
+        (172 + 6 * objs.len()) as u16
     }
 
     pub fn process(
