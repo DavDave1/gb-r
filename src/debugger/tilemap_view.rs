@@ -3,14 +3,14 @@ use image::{GenericImage, RgbaImage};
 
 use crate::gbr::ppu::{
     palette::{GrayShade, Palette},
-    tile::TileData,
+    tile::{TileData, TileMap},
     TILE_HEIGHT, TILE_WIDTH,
 };
 
 const TILE_PER_ROW: usize = 32;
 const ROWS: usize = 32;
 
-fn create_image(tilemap: &[u8], tiles: &TileData, bg_tile_area: bool) -> ColorImage {
+fn create_image(tilemap: &TileMap, tiles: &TileData, bg_tile_area: bool) -> ColorImage {
     let pal = Palette::new(
         GrayShade::White,
         GrayShade::LightGray,
@@ -23,22 +23,11 @@ fn create_image(tilemap: &[u8], tiles: &TileData, bg_tile_area: bool) -> ColorIm
 
     let mut img = RgbaImage::new(w as u32, h as u32);
 
-    for (i, tile_id) in tilemap.iter().enumerate() {
-        let x = (i as u32) % TILE_PER_ROW as u32 * TILE_WIDTH;
-        let y = (i as u32) / TILE_PER_ROW as u32 * TILE_HEIGHT;
+    for r in 0..h {
+        let line = tilemap.line(r, tiles, bg_tile_area);
 
-        let mut tile_region = img.sub_image(x, y, TILE_WIDTH, TILE_HEIGHT);
-
-        let tile = tiles.list()[TileData::tile_index_from_bg_map(*tile_id as usize, bg_tile_area)];
-
-        for r in 0..TILE_HEIGHT as usize {
-            for c in 0..TILE_WIDTH as usize {
-                tile_region.put_pixel(
-                    c as u32,
-                    r as u32,
-                    image::Rgba(pal.rgba(tile.pixels[r][c]).rgba),
-                );
-            }
+        for c in 0..line.len() {
+            img.put_pixel(c as u32, r as u32, image::Rgba(pal.rgba(line[c]).rgba));
         }
     }
 
@@ -63,7 +52,7 @@ pub struct TilemapView {
 impl TilemapView {
     pub fn show(
         &mut self,
-        tilemap: &[u8],
+        tilemap: &TileMap,
         tiles: &TileData,
         bg_tile_area: bool,
         ui: &mut egui::Ui,

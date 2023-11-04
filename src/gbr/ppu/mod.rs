@@ -83,8 +83,7 @@ pub struct PpuState {
     pub viewport: Point<u8>,
     pub win_pos: Point<u8>,
     pub tiles: TileData,
-    pub bg_tilemap: Vec<u8>,
-    pub win_tilemap: Vec<u8>,
+    pub tilemaps: [TileMap; 2],
 }
 
 pub struct PPU {
@@ -352,17 +351,6 @@ impl PPU {
     }
 
     pub fn state(&self) -> PpuState {
-        let mut bg_tilemap = vec![0; 32 * 32];
-        let mut win_tilemap = vec![0; 32 * 32];
-
-        bg_tilemap.copy_from_slice(
-            &self.vram[TILEMAP_BLOCK0_START as usize..TILEMAP_BLOCK0_START as usize + 1024],
-        );
-
-        win_tilemap.copy_from_slice(
-            &self.vram[TILEMAP_BLOCK1_START as usize..TILEMAP_BLOCK1_START as usize + 1024],
-        );
-
         PpuState {
             lcd_control: self.lcd_control,
             lcd_status: self.lcd_status,
@@ -373,8 +361,7 @@ impl PPU {
             viewport: self.viewport.clone(),
             win_pos: self.win_pos.clone(),
             tiles: self.tiles.clone(),
-            bg_tilemap,
-            win_tilemap,
+            tilemaps: self.tilemaps.clone(),
         }
     }
 

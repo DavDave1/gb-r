@@ -99,7 +99,7 @@ impl UiState {
                 .show(ctx, |ui| {
                     let view_idx = self.gb_state.ppu.lcd_control.bg_tile_map_area_sel as usize;
                     self.tilemap_views[view_idx].show(
-                        &self.gb_state.ppu.bg_tilemap,
+                        &self.gb_state.ppu.tilemaps[0],
                         &self.gb_state.ppu.tiles,
                         self.gb_state.ppu.lcd_control.bg_and_window_tile_area_sel,
                         ui,
@@ -113,7 +113,7 @@ impl UiState {
                 .show(ctx, |ui| {
                     let view_idx = self.gb_state.ppu.lcd_control.window_tile_area_sel as usize;
                     self.tilemap_views[view_idx].show(
-                        &self.gb_state.ppu.win_tilemap,
+                        &self.gb_state.ppu.tilemaps[1],
                         &self.gb_state.ppu.tiles,
                         self.gb_state.ppu.lcd_control.bg_and_window_tile_area_sel,
                         ui,
