@@ -317,6 +317,7 @@ impl Ui {
             &self.screen_descriptor,
         );
 
+
         // Render egui with WGPU
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

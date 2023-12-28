@@ -92,6 +92,7 @@ impl PixelProcessor {
         self.pixel_fifo.clear();
 
         self.objs = oam.get_objs_at_line(ly);
+
     }
 
     pub fn finished(&self) -> bool {
@@ -126,6 +127,7 @@ impl PixelProcessor {
                 y: viewport.y.wrapping_add(ly) as u16,
             }
         };
+
 
         let tilemap_index = if (is_win && lcd_ctrl.window_tile_area_sel)
             || (!is_win && lcd_ctrl.bg_tile_map_area_sel)

@@ -199,9 +199,9 @@ pub fn start_gb_thread<DebuggerType: Debugger + Sync + Send + 'static>(
                 let elapsed = SystemTime::now().duration_since(now).unwrap();
                 now = SystemTime::now();
 
-                if elapsed < frame_time {
-                    std::thread::sleep(frame_time - elapsed);
-                }
+                // if elapsed < frame_time {
+                //     std::thread::sleep(frame_time - elapsed);
+                // }
             } else if stepping {
                 gb.step().unwrap();
             }
