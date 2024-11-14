@@ -2,6 +2,8 @@
 
 GB-R is an experimental Game Boy emulator and debugger written in Rust.
 
+![GB-R Demo](https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExbjhxODI3ZjVxNTdpMnBzdnAzdG94dDN5ZDFxbDA5M2EybnVtNDh5dSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/p6AZNKqAK9Vo6flCYx/giphy.gif)
+
 ## Project goal
 
 The goal of this project is to experiment and learn low level systems programming and the Rust language.
