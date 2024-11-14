@@ -91,6 +91,11 @@ impl MBC {
     }
 
     pub fn read_byte(&self, addr: u16) -> Result<u8, GbError> {
+        // ROM is not loaded, return invalid values.
+        if self.rom.len() == 0 {
+            return Ok(0xFF);
+        }
+
         match addr {
             CART_ROM_BANK0_START..=CART_ROM_BANK0_END => Ok(self.rom[addr as usize]),
             CART_ROM_ACTIVE_BANK_START..=CART_ROM_ACTIVE_BANK_END => {
