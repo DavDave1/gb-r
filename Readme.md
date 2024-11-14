@@ -1,90 +1,53 @@
-## PPU State machine
+# GB-R
 
-1 dot == 1 CPU cycle
+GB-R is an experimental Game Boy emulator and debugger written in Rust.
 
-154 scan lines
+## Project goal
 
-each scan line is 456 dots
+The goal of this project is to experiment and learn low level systems programming and the Rust language.
 
-Initial state
-dot count = 0
-LY = 0
-Mode2
+## Bulding and running
 
-Next cylce
+GB-R can be built with
 
-update dot count
-if LY > 144
-  set VBLANK
-  if LY == 153 && DOT >=456
-     render
-     LY = 0
-     DOT = 456 - DOT
-else if DOT <= 80
-   Mode2
-else if DOT  < 289 && !DRAWING DONE
-   Mode3
-else if DOT <= 456
-   Mode0
-else
-   LY++
-   DOT = 456 - DOT
+```
+cargo build
+```
 
-Mode2:
-  Read tiles
-Mode3:
-  Draw pixels
-  set drawing done
-Mode0
-  set HBLANK
+and run with
 
-## PPU Rendering
+```
+cargo run -- ./data/DMG_ROM.bin <path_to_rom>
+```
 
-When PPU enters mode 3, it starts drawing pixels using FIFO and Pixel fetcher
+## Main dependencies
 
-Pixel fetcher pushes pixels in the FIFOs: 1 FIFO for BG/Win and 1 FIFO for OBJs
+- [egui](https://github.com/emilk/egui) immediate mode GUI crate for the debugguer UI
+- [pixels](https://github.com/parasyte/pixels) and [winit](https://github.com/rust-windowing/winit) crates for rendering 2D graphics (debugger UI and GB-R PPU output)
+- [thiserror](https://github.com/dtolnay/thiserror) for error handling
 
-When FIFO is filled with 8 pixels, the pixel drawing happens: FIFOs are mixed based on
-priority and color is retrieved using palettes.
+## TODOs
 
-### Mode 3
+Emulator:
 
-### Get tile index
+- [x] CPU interpreter
+- [x] Basic Picture Processing Unit
+- [x] Memory Bank Controller Type 1
+- [x] DMA unit
+- [x] Interrupts
+- [x] Input handling
+- [ ] Scan line accurare PPU
+- [ ] Audio Processing Unit
+- [ ] Memory Bank Controllers Types 2 - 7
 
-For background: check LCD Control reg BG tile map area flag (3)
-- If LCDControl.3 is true and X coord of scanline is <> viewport X cood
-   - Read tilemap from $9C00
-- Else
-   - Read tilemap from $9800
-- Compute tile X,Y coord as:
-   - FetcherX = (ScrollX / 8 + FetcherX) &1F
-   - FetcherY = (LY + ScrollY) & 0xFF
-     - FetcherX is from 0 to 31 => 1 FetcherX == 8 ScanLineX
-     - FetcherY is from 0 to 255
-   
-For window: check LCD Control reg Win tile map area flag (6)
-- If LCDControl.6 is true and X coord of scanline is >< viewport X cood
-   - Read tilemap from $9C00
-- Else
-   - Read tilemap from $9800
+Debugger:
 
-### Get tile data low
-
-Get lower byte data for tile at index.
-
-### Get tile data high
-
-Get higher byte data for tile at index
-
-This also pushes row of 8 BG/Win pixels to the FIFO
-
-### Push
-
-Push a row of 8 BW/Win pixels to the FIFO, only if FIFO is empty
-
-- If Horizontal Flip == true
-  - Push LSB of pixels first
-- Else
-  - Push MSB first
-
-
+- [x] Disassembler
+- [x] Breakpoints
+- [x] VRAM dump
+- [x] CPU registers view
+- [x] Tilemap view
+- [x] LCD status and control registers view
+- [x] Interrupts view
+- [x] Inputs register view
+- [ ] Emulator thread error handling
