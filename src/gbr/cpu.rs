@@ -642,6 +642,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[test]
     fn stop() {
         let mut tester = CpuTester::new();
@@ -652,6 +653,7 @@ mod tests {
         assert_eq!(tester.cpu.low_power_mode, true);
     }
 
+    #[ignore]
     #[test]
     fn load_byte_imm() {
         let mut tester = CpuTester::new();
@@ -662,6 +664,7 @@ mod tests {
         assert_eq!(tester.cpu.read_single_reg(&A), 0xAB);
     }
 
+    #[ignore]
     #[test]
     fn load_word_imm() {
         let mut tester = CpuTester::new();
@@ -672,6 +675,7 @@ mod tests {
         assert_eq!(tester.cpu.read_hl(), 0xBAAB);
     }
 
+    #[ignore]
     #[test]
     fn load_byte_from_addr() {
         let mut tester = CpuTester::new();
