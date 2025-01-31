@@ -44,6 +44,14 @@ impl GameBoy {
         }
     }
 
+    /// Run the Game Boy for a single instruction.
+    ///
+    /// Returns whether a vblank interrupt was triggered.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `GbError` if an error occurs during the step.
+    ///
     pub fn step(&mut self) -> Result<bool, GbError> {
         let cycles = self.cpu.step(&mut self.bus)?;
 

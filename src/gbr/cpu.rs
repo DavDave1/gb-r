@@ -73,7 +73,7 @@ impl fmt::Display for CpuState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Regsisters:\n
+            "Registers:\n
             AF {:#06X}, BC {:#06X}, DE {:#06X}, HL {:#06X}, PC {:#06X}, SP {:#06X}\n
             Flags:\n
             Z {}, C {}, BCD-N {}, BCD-H {}\n

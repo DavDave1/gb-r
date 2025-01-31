@@ -176,7 +176,6 @@ impl PPU {
             self.lcd_status.mode.set(ScreenMode::SreachingOAM);
         } else if self.lcd_status.mode.get() == ScreenMode::SreachingOAM && self.mode_3_dots == 0 {
             self.lcd_status.mode.set(ScreenMode::TransferringData);
-            // self.pixel_processor.start(oam, self.ly, &self.viewport);
             self.mode_3_dots = self.pixel_processor.draw_line(
                 self.ly,
                 &self.viewport,
